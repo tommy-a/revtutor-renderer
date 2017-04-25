@@ -1,41 +1,28 @@
 import * as Fabric from 'fabric';
 const fabric = (Fabric as any).fabric as typeof Fabric;
 
+import { PathDrawable } from '../data-retriever';
 import { NormalPenDot } from './normal-pen-dot';
 import { NormalPenPath } from './normal-pen-path';
 
-export enum PenType {
-    Normal = 0,
-    Calligraphy = 1
-}
-
-export interface PathInfo {
-    isEraser: boolean;
-    penType: PenType;
-    strokeWidth: number;
-    strokeColor?: string;
-    strokeOpacity?: number;
-    d3?: string;
-}
-
 export abstract class PathFactory {
-    static parsePath(info: PathInfo) {
+    static parsePath(p: PathDrawable) {
         const options = {} as { [key: string]: any };
 
-        if (info.isEraser) {
+        if (p.isEraser) {
             options.globalCompositeOperation = 'destination-out';
             options.color = 'rgba(0,0,0,1)';
         } else {
             options.globalCompositeOperation = 'source-over';
-            if (info.strokeColor) {
-                options.color = `rgba(${info.strokeColor},${info.strokeOpacity})`;
+            if (p.strokeColor) {
+                options.color = `rgba(${p.strokeColor},${p.strokeOpacity})`;
             } else {
                 options.color = 'rgba(0,0,0,0)';
             }
         }
-        options.strokeWidth = info.strokeWidth;
+        options.strokeWidth = p.strokeWidth;
 
-        const commands = new (fabric as any).Path(info.d3).path;
+        const commands = new (fabric as any).Path(p.d3).path;
 
         // check if the path is a dot
         if (commands.length === 2 && commands[1][0] === 'A') {

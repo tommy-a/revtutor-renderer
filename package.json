@@ -18,15 +18,15 @@
     "fabric": "^1.7.8",
     "fluent-ffmpeg": "^2.1.0",
     "ioredis": "^2.5.0",
-    "rxjs": "^5.2.0"
+    "rxjs": "^5.3.0"
   },
   "devDependencies": {
-    "@types/fabric": "^1.5.20",
+    "@types/fabric": "^1.5.23",
     "@types/fluent-ffmpeg": "^0.0.2",
-    "@types/node": "^7.0.8",
+    "@types/node": "^7.0.12",
     "ts-node": "^3.0.2",
-    "tslint": "^4.5.1",
-    "tslint-microsoft-contrib": "^4.0.0",
-    "typescript": "^2.2.1"
+    "tslint": "4.5.1",
+    "tslint-microsoft-contrib": "^4.0.1",
+    "typescript": "^2.2.2"
   }
 }
