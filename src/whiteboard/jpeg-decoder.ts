@@ -27,7 +27,7 @@ export interface JpegMetadata {
  * @class Reads and decodes metadata properties from JPEG binary data src
  */
 export class JpegDecoder {
-    private buffer: DataView;
+    private buffer: Buffer;
     private bufferLength: number;
     private _metadata: JpegMetadata = {};
 
@@ -35,7 +35,7 @@ export class JpegDecoder {
     private exifLittleEndian: boolean;
 
     /**
-     * @member {Object} metadata - all existing EXIF metadata properties decoded from the src
+     * @property All existing EXIF metadata properties decoded from the src
      */
     get metadata() {
         return this._metadata;
@@ -43,15 +43,15 @@ export class JpegDecoder {
 
     /**
      * @constructs
-     * @param {ArrayBuffer} imageData - buffer containing binary data for the JPEG src image
+     * @param imageData - buffer containing binary data for the JPEG src image
      */
-    constructor(imageData: ArrayBuffer) {
-        this.buffer = new DataView(imageData);
+    constructor(imageData: Buffer) {
+        this.buffer = imageData;
         this.bufferLength = this.buffer.byteLength;
 
         // ensure the start of a valid jpeg
-        if (this.buffer.getUint8(0) !== JPEG_MARKER_PREFIX ||
-                this.buffer.getUint8(1) !== JPEG_START_MARKER) {
+        if (this.buffer.readUInt8(0) !== JPEG_MARKER_PREFIX ||
+                this.buffer.readUInt8(1) !== JPEG_START_MARKER) {
             throw new Error('Invalid JPEG src image data');
         }
 
@@ -60,7 +60,11 @@ export class JpegDecoder {
 
     setExifOrientation(value: ExifOrientation): void {
         if (this.exifOrientationOffset) {
-            this.buffer.setUint16(this.exifOrientationOffset, value, this.exifLittleEndian);
+            if (this.exifLittleEndian) {
+                this.buffer.writeUInt16LE(value, this.exifOrientationOffset);
+            } else {
+                this.buffer.writeUInt16BE(value, this.exifOrientationOffset);
+            }
         }
     }
 
@@ -71,11 +75,11 @@ export class JpegDecoder {
         // iterate over JPEG/JFIF binary data marker segments
         while (offset < this.bufferLength) {
             // check for the start of a valid 2 byte marker
-            if (this.buffer.getUint8(offset) !== JPEG_MARKER_PREFIX) {
+            if (this.buffer.readUInt8(offset) !== JPEG_MARKER_PREFIX) {
                 throw new Error('Invalid marker');
             }
 
-            marker = this.buffer.getUint8(offset + 1);
+            marker = this.buffer.readUInt8(offset + 1);
 
             // parse and decode the EXIF segment if it exists
             if (marker === JPEG_EXIF_MARKER) {
@@ -86,7 +90,7 @@ export class JpegDecoder {
             }
 
             // move to the start of the next marker
-            offset += 2 + this.buffer.getUint16(offset + 2); // marker + segment length
+            offset += 2 + this.buffer.readUInt16BE(offset + 2); // marker + segment length
         }
     }
 
@@ -99,9 +103,9 @@ export class JpegDecoder {
 
         // check for TIFF validity and endianness
         let littleEndian: boolean;
-        if (this.buffer.getUint32(offset) === TIFF_LITTLE_START) {
+        if (this.buffer.readUInt32BE(offset) === TIFF_LITTLE_START) {
             littleEndian = true;
-        } else if (this.buffer.getUint32(offset) === TIFF_BIG_START) {
+        } else if (this.buffer.readUInt32BE(offset) === TIFF_BIG_START) {
             littleEndian = false;
         } else {
             throw new Error('Invalid TIFF header');
@@ -110,19 +114,19 @@ export class JpegDecoder {
         // keep track for calling any setter methods post-decoding
         this.exifLittleEndian = littleEndian;
 
-        const ifdOffset = this.buffer.getUint32(offset + 4, littleEndian);
+        const ifdOffset = this.buffer.readUInt32BE(offset + 4, littleEndian);
         const dirStart = offset + ifdOffset;
-        const tagCount = this.buffer.getUint16(dirStart, littleEndian);
+        const tagCount = this.buffer.readUInt16BE(dirStart, littleEndian);
 
         // iterate over tag entries and decode their values
         let tagOffset: number, tag: number;
         for (let i = 0; i < tagCount; i++) {
             tagOffset = dirStart + 2 + i * 12; // 2 byte tagCount + 12 byte tags
-            tag = this.buffer.getUint16(tagOffset, littleEndian);
+            tag = this.buffer.readUInt16BE(tagOffset, littleEndian);
 
             if (tag === TIFF_ORIENTATION_TAG) {
                 this.exifOrientationOffset = tagOffset + 8;
-                this._metadata.orientation = this.buffer.getUint16(this.exifOrientationOffset, littleEndian);
+                this._metadata.orientation = this.buffer.readUInt16BE(this.exifOrientationOffset, littleEndian);
 
                 return; // only interested in orientation tag for now
             }
@@ -132,21 +136,9 @@ export class JpegDecoder {
     private getStringFromBytes(start: number, length: number): string {
         let str = '';
         for (let offset = start; offset < start + length; offset++) {
-            str += String.fromCharCode(this.buffer.getUint8(offset));
+            str += String.fromCharCode(this.buffer.readUInt8(offset));
         }
 
         return str;
-    }
-
-    static base64StrToImageData(str: string): ArrayBuffer {
-        const binaryStr =  window.atob(str);
-        const len = binaryStr.length;
-
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++)        {
-            bytes[i] = binaryStr.charCodeAt(i);
-        }
-
-        return bytes.buffer;
     }
 }

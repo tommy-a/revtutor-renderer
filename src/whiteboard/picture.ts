@@ -3,8 +3,11 @@ import * as Fabric from 'fabric';
 const fabric = (Fabric as any).fabric as typeof Fabric;
 
 import { PictureDrawable } from './data-retriever';
-import { JpegDecoder, JpegMetadata, ExifOrientation } from './jpeg-decoder';
+import { ExifOrientation, JpegDecoder, JpegMetadata } from './jpeg-decoder';
 
+/**
+ * @interface CGAffineTransform properties - see https://github.com/revdotcom/revtutorios/wiki/Pictures-Algorithm
+ */
 interface Transform {
     a: number;
     b: number;
@@ -14,17 +17,25 @@ interface Transform {
     ty: number;
 }
 
+/**
+ * @class Class for transforming a given PictureDrawable's binary data into a fabric Image
+ */
 export class Picture {
     private drawable: PictureDrawable;
     private transform: Transform;
 
     // buffer for the src image
     private binaryData: Buffer;
-    private metadata: JpegMetadata;
+    private metadata?: JpegMetadata;
 
+    /**
+     * @property Unique id
+     */
     get key() { return this.drawable.key; };
 
-    // staging object to be added to the whiteboard's canvas
+    /**
+     * @property Fabric staging object to be added to the whiteboard's canvas
+     */
     get image() { return this._image; };
     private _image: fabric.Image;
 
@@ -46,6 +57,10 @@ export class Picture {
         this.applyTransform(drawable.transform);
     }
 
+    /**
+     * Parses a given affine transform string, and transforms the src image appropriately
+     * @param str - the string defining the new transform to apply
+     */
     applyTransform(str: string): void {
         this.drawable.transform = str;
         this.transform = Picture.parseTransform(str);
@@ -69,7 +84,6 @@ export class Picture {
         // exclude array bracket chars
         const transformArray = str.substring(1, str.length - 1).split(', ');
 
-        // CGAffineTransform properties - see https://github.com/revdotcom/revtutorios/wiki/Pictures-Algorithm
         return {
             a: parseFloat(transformArray[0]),
             b: parseFloat(transformArray[1]),
@@ -108,7 +122,8 @@ export class Picture {
     }
 
     private get orientationRotation(): number {
-        switch (this.metadata.orientation) {
+        const orientation = this.metadata ? this.metadata.orientation : ExifOrientation.NORMAL;
+        switch (orientation) {
             case ExifOrientation.NORMAL:
                 return 0;
             case ExifOrientation.ROTATE_90_DEGREES:
@@ -124,10 +139,10 @@ export class Picture {
 
     private decodeImage(): void {
         // extract metadata from the binary data
-        const jpeg = new JpegDecoder(this.binaryData.buffer);
+        const jpeg = new JpegDecoder(this.binaryData);
         this.metadata = jpeg.metadata;
 
-        // reset the orientation value to NORMAL to prevent the browser from respecting it
+        // reset the orientation value to NORMAL to prevent the canvas from respecting it
         jpeg.setExifOrientation(ExifOrientation.NORMAL);
     }
 }

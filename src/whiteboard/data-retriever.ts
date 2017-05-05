@@ -1,7 +1,7 @@
 import { Observable } from 'rxjs/Observable';
 
-import { TreeDatabase } from '../blaze/tree-database';
 import { TreeDataEventType } from '../blaze/tree-data-event';
+import { TreeDatabase } from '../blaze/tree-database';
 
 export type WhiteboardInfo = {
     canvasWidth: number;

@@ -34,7 +34,9 @@ export abstract class PathFactory {
         }
 
         const correctedCommands = commands.map((cmd: string[]) => {
-            if (cmd[0] === 'Q') { // MathElf represents quadratic curve with endpoind and control point reversed compared to svg standard
+            // MathElf represents quadratic curves with the endpoint and control point reversed,
+            // compared to svg standard
+            if (cmd[0] === 'Q') {
                 return [cmd[0], cmd[3], cmd[4], cmd[1], cmd[2]];
             } else {
                 return cmd;
