@@ -2,7 +2,6 @@ import { expect, sinon } from '../common';
 
 import * as Fabric from 'fabric';
 const fabric = (Fabric as any).fabric as typeof Fabric;
-import * as fs from 'fs';
 import { Subject } from 'rxjs/Subject';
 
 import { TreeDatabase } from '../../src/blaze/tree-database';
@@ -20,12 +19,11 @@ describe('Whiteboard', () => {
     };
 
     let sandbox: sinon.SinonSandbox,
-        createWriteStream: sinon.SinonStub,
-        createReadStream: sinon.SinonStub,
-        writeElapsedFrames: sinon.SinonSpy;
+        writeSnapshot: sinon.SinonStub,
+        writeElapsedFrames: sinon.SinonStub;
 
     let audioStartObs: Subject<MemberInfo>,
-        dimensionsObs: Subject<WhiteboardInfo>,
+        whiteboardInfoObs: Subject<WhiteboardInfo>,
         drawablesObs: Subject<Drawable>,
         pictureUpdatesObs: Subject<PictureDrawable>;
 
@@ -36,26 +34,25 @@ describe('Whiteboard', () => {
         sandbox = sinon.sandbox.create();
 
         // stub dependencies
-        createReadStream = sandbox.stub(fs, 'createReadStream').returns({ on: () => null, pipe: () => null });
-        createWriteStream = sandbox.stub(fs, 'createWriteStream').returns({ on: () => null });
         sandbox.stub(picture, 'Picture').returns(MOCK_PICTURE);
         sandbox.stub(pathFactory, 'PathFactory').returns({ parsePath: MOCK_PICTURE.image });
 
         // stub out observables for triggering blazeDb events
         audioStartObs = new Subject<MemberInfo>();
-        dimensionsObs = new Subject<WhiteboardInfo>();
+        whiteboardInfoObs = new Subject<WhiteboardInfo>();
         drawablesObs = new Subject<Drawable>();
         pictureUpdatesObs = new Subject<PictureDrawable>();
 
         dataRetriever = new DataRetriever(new TreeDatabase(false));
         sinon.stub(dataRetriever, 'listenForAudioStart').returns(audioStartObs.asObservable());
-        sinon.stub(dataRetriever, 'listenForDimensions').returns(dimensionsObs.asObservable());
+        sinon.stub(dataRetriever, 'listenForWhiteboardInfo').returns(whiteboardInfoObs.asObservable());
         sinon.stub(dataRetriever, 'listenForDrawables').returns(drawablesObs.asObservable());
         sinon.stub(dataRetriever, 'listenForPictureUpdate').returns(pictureUpdatesObs.asObservable());
 
         sut = new Whiteboard(TEST_OUTPUT_DIR, {}, dataRetriever);
 
-        writeElapsedFrames = sandbox.spy(sut, 'writeElapsedFrames');
+        writeSnapshot = sandbox.stub(sut, 'writeSnapshot').returns({ catch: () => null });
+        writeElapsedFrames = sandbox.stub(sut, 'writeElapsedFrames').returns({ catch: () => null });
     });
 
     afterEach(() => {
@@ -76,63 +73,73 @@ describe('Whiteboard', () => {
     });
 
     describe('render()', () => {
-        it('should not write frames while the whiteboard is unchanged', () => {
-            sut.render();
-            expect(createWriteStream).not.to.have.been.called;
+        it('should not write frames while the whiteboard is unchanged', async () => {
+            await sut.render();
+            expect(writeElapsedFrames).not.to.have.been.called;
+            expect(writeSnapshot).not.to.have.been.called;
         });
 
-        it('should overwrite the initial dimensions frame when adding the first picture, before the audio starts', () => {
-            dimensionsObs.next({ canvasWidth: 10, canvasHeight: 10 });
+        it('should overwrite the initial dimensions frame when adding the first picture, before the audio starts', async () => {
+            whiteboardInfoObs.next({ canvasWidth: 10, canvasHeight: 10, pages: { key: { paperType: 2 } } });
             drawablesObs.next({ type: 'picture' } as Drawable);
 
-            sut.render();
+            await sut.render();
 
-            expect(createWriteStream).to.have.been.calledOnce.calledWithExactly(`${TEST_OUTPUT_DIR}/0.png`);
+            expect(writeElapsedFrames).not.to.have.been.called;
+            expect(writeSnapshot).to.have.been.calledOnce.calledWithExactly(0);
         });
 
-        it('should not write a frame when the audio starts', () => {
+        it('should not write a frame when the audio starts', async () => {
             audioStartObs.next({ audioStatus: 2 });
-            sut.render();
-            expect(createWriteStream).not.to.have.been.called;
+
+            await sut.render();
+
+            expect(writeElapsedFrames).not.to.have.been.called;
+            expect(writeSnapshot).not.to.have.been.called;
         });
 
-        it('should write a single frame for a new path', () => {
+        it('should write a single frame for a new path', async () => {
             audioStartObs.next({ audioStatus: 2 });
             drawablesObs.next({ type: 'path', d3: '' } as any);
 
             sut.addDelta((1 / sut.fps) * 1000); // add enough for one frame
-            sut.render();
+            await sut.render();
 
-            expect(createWriteStream).to.have.been.calledOnce.calledWithExactly(`${TEST_OUTPUT_DIR}/1.png`);
+            expect(writeElapsedFrames).not.to.have.been.called;
+            expect(writeSnapshot).to.have.been.calledOnce.calledWithExactly(1);
         });
 
-        it('should write elapsed frames', () => {
+        it('should write elapsed frames', async () => {
             audioStartObs.next({ audioStatus: 2 });
             drawablesObs.next({ type: 'path', d3: '' } as any);
 
             sut.addDelta(3 * (1 / sut.fps) * 1000); // add enough for three total frames
-            sut.render();
+            await sut.render();
 
             expect(writeElapsedFrames).to.have.been.calledWithExactly(2);
+            expect(writeSnapshot).to.have.been.calledOnce.calledWithExactly(1);
         });
 
-        it('should write a single frame for a transformed picture', () => {
+        it('should write a single frame for a transformed picture', async () => {
             // add the initial picture
             audioStartObs.next({ audioStatus: 2 });
             drawablesObs.next({ type: 'picture' } as Drawable);
 
-            sut.render();
+            await sut.render();
 
-            expect(createWriteStream).to.have.been.calledOnce.calledWithExactly(`${TEST_OUTPUT_DIR}/0.png`);
-            createWriteStream.resetHistory();
+            expect(writeElapsedFrames).not.to.have.been.called;
+            expect(writeSnapshot).to.have.been.calledOnce.calledWithExactly(0);
+            writeElapsedFrames.resetHistory();
+            writeSnapshot.resetHistory();
 
             // transform the picture
             pictureUpdatesObs.next({ key: MOCK_PICTURE.key } as PictureDrawable);
 
             sut.addDelta((1 / sut.fps) * 1000); // add enough for one frame
-            sut.render();
+            await sut.render();
 
-            expect(createWriteStream).to.have.been.calledOnce.calledWithExactly(`${TEST_OUTPUT_DIR}/1.png`);
+            expect(writeElapsedFrames).not.to.have.been.called;
+            expect(writeSnapshot).to.have.been.calledOnce.calledWithExactly(1);
         });
     });
 });

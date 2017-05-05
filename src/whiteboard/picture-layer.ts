@@ -10,13 +10,6 @@ export class PictureLayer extends CanvasLayer {
      */
     private pictures: Picture[] = [];
 
-    constructor() {
-        super();
-
-        // TODO: remove this line (and the one in redraw()) after creating a BackgroundLayer class
-        this.canvas.setBackgroundColor('rgba(255, 255, 255, 1.0)', () => this.canvas.renderAll());
-    }
-
     /**
      * Adds a picture drawable to the canvas to be drawn, as well as marks _isDirty to true
      * @param drawable - a Picture object containing the fabric image to be drawn
@@ -46,8 +39,6 @@ export class PictureLayer extends CanvasLayer {
      */
     private redraw(): void {
         this.canvas.clear();
-        this.canvas.setBackgroundColor('rgba(255, 255, 255, 1.0)', () => this.canvas.renderAll());
-
         this.pictures.forEach(p => this.canvas.add(p.image));
         this._isDirty = true;
     }

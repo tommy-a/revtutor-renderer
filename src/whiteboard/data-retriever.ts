@@ -2,10 +2,16 @@ import { Observable } from 'rxjs/Observable';
 
 import { TreeDataEventType } from '../blaze/tree-data-event';
 import { TreeDatabase } from '../blaze/tree-database';
+import { PageType } from './background-layer';
+
+export type PageInfo = {
+    paperType: PageType;
+};
 
 export type WhiteboardInfo = {
     canvasWidth: number;
     canvasHeight: number;
+    pages: {[key: string]: PageInfo};
 };
 
 export type MemberInfo = {
@@ -46,7 +52,7 @@ export class DataRetriever {
         this.blazeDb = blazeDb;
     }
 
-    listenForDimensions(): Observable<WhiteboardInfo> {
+    listenForWhiteboardInfo(): Observable<WhiteboardInfo> {
         return this.blazeDb.reference('whiteboard')
             .changes(new Set([TreeDataEventType.ValueChanged]))
             .map(ev => ev.value.toJSON() as WhiteboardInfo);

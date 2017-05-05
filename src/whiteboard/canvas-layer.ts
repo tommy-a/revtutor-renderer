@@ -22,7 +22,7 @@ export class CanvasLayer {
     /**
      * @property Height in pixels of the underlying canvas
      */
-    get height(): number { return this.canvas.getWidth(); };
+    get height(): number { return this.canvas.getHeight(); };
 
     /**
      * @property Whether or not the canvas has been modified since the last call to dataUrl()

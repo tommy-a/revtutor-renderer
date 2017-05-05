@@ -9,6 +9,7 @@ import { Subscription } from 'rxjs/Subscription';
 import * as logger from 'winston';
 
 import { ApplicationError, ErrorCode } from '../application-error';
+import { BackgroundLayer } from './background-layer';
 import { DataRetriever, PathDrawable, PictureDrawable, WhiteboardInfo } from './data-retriever';
 import { PathLayer } from './path-layer';
 import { Picture } from './picture';
@@ -38,6 +39,7 @@ export class Whiteboard {
     private clock = 0; // the millisecond duration into the video that the whiteboard's canvas currently represents
     private timeOfLastSnapshot = 0; // a millisecond timestamp used for calculating the time between snapshots
 
+    private backgroundLayer: BackgroundLayer; // canvas for drawing the PaperType background to
     private pictureLayer: PictureLayer; // canvas for drawing pictures to
     private pathLayer: PathLayer; // canvas for drawing paths to; needs it's own canvas so that erasers don't erase background images
     private snapshot: Canvas; // canvas representing the current state of the whiteboard
@@ -51,6 +53,7 @@ export class Whiteboard {
         this.dataRetriever = dataRetriever;
         this.subscription = new Subscription();
 
+        this.backgroundLayer = new BackgroundLayer();
         this.pictureLayer = new PictureLayer();
         this.pathLayer = new PathLayer();
         this.snapshot = createCanvasForNode(0, 0);
@@ -83,8 +86,7 @@ export class Whiteboard {
         }
 
         // render a new frame for the recent changes (i.e. compose all layers)
-        this.snapshot.setBackgroundImage(this.pictureLayer.dataUrl, () => this.snapshot.renderAll());
-        this.snapshot.setOverlayImage(this.pathLayer.dataUrl, () => this.snapshot.renderAll());
+        await this.composeLayers();
 
         // check to see if these changes have occured within the same frame
         const elapsedFrames = this.getElapsedFrameCount();
@@ -112,6 +114,20 @@ export class Whiteboard {
     private getElapsedFrameCount(): number {
         const duration = Math.round(this.clock - this.timeOfLastSnapshot);
         return Math.round(duration / ((1 / this.fps) * 1000));
+    }
+
+    private async composeLayers(): Promise<void> {
+        this.snapshot.clear();
+
+        this.snapshot.add(await Whiteboard.imageFromURL(this.backgroundLayer.dataUrl));
+        this.snapshot.add(await Whiteboard.imageFromURL(this.pictureLayer.dataUrl));
+        this.snapshot.add(await Whiteboard.imageFromURL(this.pathLayer.dataUrl));
+    }
+
+    static async imageFromURL(url: string): Promise<fabric.Image> {
+        return new Promise<fabric.Image>((resolve) => {
+            fabric.Image.fromURL(url, image => resolve(image));
+        });
     }
 
     private writeSnapshot(idx: number): Promise<{}>  {
@@ -160,8 +176,8 @@ export class Whiteboard {
 
     private subscribe(): void {
         this.subscription.add(
-            this.dataRetriever.listenForDimensions()
-                .subscribe(info => this.onDimensions(info))
+            this.dataRetriever.listenForWhiteboardInfo()
+                .subscribe(info => this.onWhiteboardInfo(info))
         );
 
         this.subscription.add(
@@ -182,12 +198,18 @@ export class Whiteboard {
         );
     }
 
-    private onDimensions(info: WhiteboardInfo): void {
+    private onWhiteboardInfo(info: WhiteboardInfo): void {
+        // set new dimensions for all layers + snapshot canvas
+        this.backgroundLayer.setDimensions(info.canvasWidth, info.canvasHeight);
         this.pictureLayer.setDimensions(info.canvasWidth, info.canvasHeight);
         this.pathLayer.setDimensions(info.canvasWidth, info.canvasHeight);
-
         this.snapshot.setWidth(info.canvasWidth);
         this.snapshot.setHeight(info.canvasHeight);
+
+        // draw the background for the first page
+        const key = Object.keys(info.pages)[0];
+        const pageInfo = info.pages[key];
+        this.backgroundLayer.setPageType(pageInfo.paperType);
     }
 
     private onAudioStart(): void {
