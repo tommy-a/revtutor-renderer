@@ -22,7 +22,8 @@ export abstract class PathFactory {
         }
         options.strokeWidth = p.strokeWidth;
 
-        const commands = new (fabric as any).Path(p.d3).path;
+        const path = p.d3 || Object.keys(p.d2).map(k => (p.d2 as any)[k]).join('|');
+        const commands = new (fabric as any).Path(path).path;
 
         // check if the path is a dot
         if (commands.length === 2 && commands[1][0] === 'A') {

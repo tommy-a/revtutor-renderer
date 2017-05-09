@@ -98,9 +98,9 @@ describe('Whiteboard', () => {
             expect(writeSnapshot).not.to.have.been.called;
         });
 
-        it('should write a single frame for a new path', async () => {
+        it('should write a single frame for a path update', async () => {
             audioStartObs.next({ audioStatus: 2 });
-            drawablesObs.next({ type: 'path', d3: '' } as any);
+            drawablesObs.next({ type: 'path', d2: '' } as any);
 
             sut.addDelta((1 / sut.fps) * 1000); // add enough for one frame
             await sut.render();
@@ -111,7 +111,7 @@ describe('Whiteboard', () => {
 
         it('should write elapsed frames', async () => {
             audioStartObs.next({ audioStatus: 2 });
-            drawablesObs.next({ type: 'path', d3: '' } as any);
+            drawablesObs.next({ type: 'path', d2: '' } as any);
 
             sut.addDelta(3 * (1 / sut.fps) * 1000); // add enough for three total frames
             await sut.render();

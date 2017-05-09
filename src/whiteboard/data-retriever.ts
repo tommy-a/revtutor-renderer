@@ -35,6 +35,7 @@ export interface PathDrawable extends Drawable {
     strokeWidth: number;
     strokeColor: string;
     strokeOpacity: number;
+    d2?: {};
     d3?: string;
 }
 

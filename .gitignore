@@ -12,5 +12,6 @@ node_modules
 # OSX
 .DS_Store
 
+binary
 snapshots
 ts-node*

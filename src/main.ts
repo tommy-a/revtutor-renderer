@@ -15,7 +15,7 @@ logger.configure({
     transports: [new logger.transports.Console({
         colorize: true,
         prettyPrint: true,
-        level: 'info', // max level of verbosity to log
+        level: 'verbose', // max level of verbosity to log
         timestamp: true,
         handleExceptions: true,
         humanReadableUnhandledException: true,

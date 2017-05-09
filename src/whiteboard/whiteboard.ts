@@ -1,7 +1,5 @@
 import * as Fabric from 'fabric';
 const fabric = (Fabric as any).fabric as typeof Fabric;
-import { Canvas } from 'fabric';
-const { createCanvasForNode } = fabric;
 
 import { createReadStream, createWriteStream } from 'fs';
 import 'rxjs/add/operator/partition';
@@ -37,12 +35,11 @@ export class Whiteboard {
 
     private isStarted = false; // the rendering starts when the audio starts; don't modify the clock until this is true
     private clock = 0; // the millisecond duration into the video that the whiteboard's canvas currently represents
-    private timeOfLastSnapshot = 0; // a millisecond timestamp used for calculating the time between snapshots
 
     private backgroundLayer: BackgroundLayer; // canvas for drawing the PaperType background to
     private pictureLayer: PictureLayer; // canvas for drawing pictures to
     private pathLayer: PathLayer; // canvas for drawing paths to; needs it's own canvas so that erasers don't erase background images
-    private snapshot: Canvas; // canvas representing the current state of the whiteboard
+    private snapshot: fabric.Canvas; // canvas representing the current state of the whiteboard
 
     private frameIdx = 0; // the last frame to have been written (i.e `{frameIdx}.png`)
 
@@ -56,7 +53,7 @@ export class Whiteboard {
         this.backgroundLayer = new BackgroundLayer();
         this.pictureLayer = new PictureLayer();
         this.pathLayer = new PathLayer();
-        this.snapshot = createCanvasForNode(0, 0);
+        this.snapshot = fabric.createCanvasForNode(0, 0);
 
         // start listening for updates to the blazeDb
         this.subscribe();
@@ -91,29 +88,28 @@ export class Whiteboard {
         // check to see if these changes have occured within the same frame
         const elapsedFrames = this.getElapsedFrameCount();
         if (elapsedFrames > 0) {
-            // write duplicate frames to fill the duration that has elapsed
+            // write duplicate frames to fill the duration that has elapsed up to the new snapshot
             if (elapsedFrames > 1) {
                 await this.writeElapsedFrames(elapsedFrames - 1).catch(err => {
                     throw new ApplicationError(ErrorCode.WriteFail, err);
                 });
             }
 
+            // write to a new frame
             await this.writeSnapshot(++this.frameIdx).catch(err => {
                 throw new ApplicationError(ErrorCode.WriteFail, err);
             });
         } else {
-            // overwrite the previously written frame (i.e. don't increment this.frameIdx)
+            // overwrite the previously written frame
             await this.writeSnapshot(this.frameIdx).catch(err => {
                 throw new ApplicationError(ErrorCode.WriteFail, err);
             });
         }
-
-        this.timeOfLastSnapshot = this.clock;
     }
 
     private getElapsedFrameCount(): number {
-        const duration = Math.round(this.clock - this.timeOfLastSnapshot);
-        return Math.round(duration / ((1 / this.fps) * 1000));
+        const totalFrames = this.clock / ((1 / this.fps) * 1000);
+        return Math.floor(totalFrames - this.frameIdx);
     }
 
     private async composeLayers(): Promise<void> {
@@ -190,8 +186,8 @@ export class Whiteboard {
             .partition(d => d.type === 'path');
 
         this.subscription.add(
-            paths.filter((d: PathDrawable) => d.d3 !== undefined)
-                .subscribe((d: PathDrawable) => this.onNewPath(d))
+            paths.filter((d: PathDrawable) => d.d2 !== undefined || d.d3 !== undefined)
+                .subscribe((d: PathDrawable) => this.onPathUpdate(d))
         );
         this.subscription.add(
             pictures.subscribe((d: PictureDrawable) => this.onNewPicture(d))
@@ -199,39 +195,59 @@ export class Whiteboard {
     }
 
     private onWhiteboardInfo(info: WhiteboardInfo): void {
-        // set new dimensions for all layers + snapshot canvas
-        this.backgroundLayer.setDimensions(info.canvasWidth, info.canvasHeight);
-        this.pictureLayer.setDimensions(info.canvasWidth, info.canvasHeight);
-        this.pathLayer.setDimensions(info.canvasWidth, info.canvasHeight);
-        this.snapshot.setWidth(info.canvasWidth);
-        this.snapshot.setHeight(info.canvasHeight);
+        try {
+            // set new dimensions for all layers + snapshot canvas
+            this.backgroundLayer.setDimensions(info.canvasWidth, info.canvasHeight);
+            this.pictureLayer.setDimensions(info.canvasWidth, info.canvasHeight);
+            this.pathLayer.setDimensions(info.canvasWidth, info.canvasHeight);
+            this.snapshot.setWidth(info.canvasWidth);
+            this.snapshot.setHeight(info.canvasHeight);
 
-        // draw the background for the first page
-        const key = Object.keys(info.pages)[0];
-        const pageInfo = info.pages[key];
-        this.backgroundLayer.setPageType(pageInfo.paperType);
+            // draw the background for the first page
+            const key = Object.keys(info.pages)[0];
+            const pageInfo = info.pages[key];
+            this.backgroundLayer.setPageType(pageInfo.paperType);
+        } catch (err) {
+            logger.error(err);
+            throw(err);
+        }
     }
 
     private onAudioStart(): void {
         this.isStarted = true;
     }
 
-    private onNewPath(drawable: PathDrawable): void {
-        this.pathLayer.addPath(drawable);
+    private onPathUpdate(drawable: PathDrawable): void {
+        try {
+            this.pathLayer.drawPath(drawable);
+        } catch (err) {
+            logger.error(err);
+            throw(err);
+        }
     }
 
     private onNewPicture(drawable: PictureDrawable): void {
-        const picture = new Picture(drawable, this.pictureBuffers[drawable.imageURL!]);
-        this.pictureLayer.addPicture(picture);
+        try {
+            const picture = new Picture(drawable, this.pictureBuffers[drawable.imageURL!]);
+            this.pictureLayer.addPicture(picture);
 
-        // subscribe to future transformation updates
-        this.subscription.add(
-            this.dataRetriever.listenForPictureUpdate(drawable.path)
-                .subscribe(d => this.onPictureUpdate(d))
-        );
+            // subscribe to future transformation updates
+            this.subscription.add(
+                this.dataRetriever.listenForPictureUpdate(drawable.path)
+                    .subscribe(d => this.onPictureUpdate(d))
+            );
+        } catch (err) {
+            logger.error(err);
+            throw(err);
+        }
     }
 
     private onPictureUpdate(drawable: PictureDrawable): void {
-        this.pictureLayer.transformPicture(drawable.key, drawable.transform);
+        try {
+            this.pictureLayer.transformPicture(drawable.key, drawable.transform);
+        } catch (err) {
+            logger.error(err);
+            throw(err);
+        }
     }
 }
