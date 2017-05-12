@@ -22,6 +22,12 @@
     "chai-vague-errors": false,
     "no-parameter-properties": false,
     "no-unused-variable": [true],
-    "mocha-no-side-effect-code": false
+    "mocha-no-side-effect-code": false,
+    "no-non-null-assertion": false,
+    "no-import-side-effect": false,
+    "newline-before-return": false,
+    "no-unnecessary-callback-wrapper": false,
+    "no-unused-expression": false,
+    "max-line-length": [false]
   }
 }

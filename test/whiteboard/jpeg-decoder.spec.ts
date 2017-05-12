@@ -30,7 +30,7 @@ describe('JpegDecoder', () => {
     });
 
     Object.keys(TEST_IMAGE_ORIENTATION_SRC).forEach(key => {
-        it('should decode the orientation metadata value for an image with EXIF_ORIENTATION.' + key, () => {
+        it(`should decode the orientation metadata value for an image with EXIF_ORIENTATION.${key}`, () => {
             const src = TEST_IMAGE_ORIENTATION_SRC[key];
             const imageData = dataUriToBuffer(src);
             sut = new JpegDecoder(imageData);

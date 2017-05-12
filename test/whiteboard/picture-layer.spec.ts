@@ -4,6 +4,7 @@ import * as Fabric from 'fabric';
 const fabric = (Fabric as any).fabric as typeof Fabric;
 const { createCanvasForNode } = fabric;
 
+import { TreeDataEventType } from '../../src/blaze/tree-data-event';
 import { PictureDrawable } from '../../src/whiteboard/data-retriever';
 import { Picture } from '../../src/whiteboard/picture';
 import { PictureLayer } from '../../src/whiteboard/picture-layer';
@@ -16,7 +17,7 @@ describe('PictureLayer', () => {
     });
 
     describe('addPicture()', () => {
-        it('should add the picture to the canvas, and set _isDirty to true', async () => {
+        it('should add a picture to the canvas, and set _isDirty to true', async () => {
             const spy = sinon.spy(sut.canvas, 'add');
 
             const picture = await createTestPicture(10);
@@ -29,13 +30,13 @@ describe('PictureLayer', () => {
     });
 
     describe('transformPicture()', () => {
-        it('should apply the transform to the picture given by key', async () => {
+        it('should apply the transform to the picture given by key, and set _isDirty to true', async () => {
             const picture = await createTestPicture(10);
             sut.addPicture(picture);
 
             const spy = sinon.spy(picture, 'applyTransform');
             const transform = '[0.5, 0, 0, 0.5, 0, 0]';
-            sut.transformPicture(picture.key, transform);
+            sut.transformPicture({key: picture.key, transform} as any);
 
             expect(spy).to.have.been.calledOnce.calledWithExactly(transform);
         });
@@ -44,8 +45,8 @@ describe('PictureLayer', () => {
             const spy = sinon.spy(sut.canvas, 'add');
 
             // add two test pictures
-            const pictureA = await createTestPicture(20);
-            const pictureB = await createTestPicture(10);
+            const pictureA = await createTestPicture(20, 'keyA');
+            const pictureB = await createTestPicture(10, 'keyB');
             sut.addPicture(pictureA);
             sut.addPicture(pictureB);
 
@@ -54,12 +55,30 @@ describe('PictureLayer', () => {
 
             // transform the second picture
             const transform = '[0.5, 0, 0, 0.5, 0, 0]';
-            sut.transformPicture(pictureB.key, transform);
+            sut.transformPicture({key: pictureB.key, transform} as any);
 
             expect(sut.isDirty).to.be.true;
             expect(spy).to.have.been.calledTwice;
             expect(spy.firstCall).to.have.been.calledWithExactly(pictureA.image);
             expect(spy.secondCall).to.have.been.calledWithExactly(pictureB.image);
+        });
+    });
+
+    describe('removePicture()', () => {
+        it('should remove a previously added picture from the canvas, and set _isDirty to true', async () => {
+            const spy = sinon.spy(sut.canvas, 'add');
+
+            // add the initial picture
+            const picture = await createTestPicture(10, 'key');
+            sut.addPicture(picture);
+
+            spy.reset();
+
+            // remove the picture
+            sut.removePicture('key');
+
+            expect(sut.isDirty).to.be.true;
+            expect(spy).not.to.have.been.calledTwice;
         });
     });
 });
@@ -69,11 +88,10 @@ describe('PictureLayer', () => {
  * @param length - side length of the square to draw
  * @returns a Promise for the resulting Picture object
  */
-async function createTestPicture(length: number): Promise<Picture> {
+async function createTestPicture(length: number, key = ''): Promise<Picture> {
     return new Promise<Picture>(async resolve => {
         const drawable: PictureDrawable = {
-            path: '',
-            key: '',
+            key,
             type: 'picture',
             imageURL: '',
             transform: '[1, 0, 0, 1, 0, 0]',

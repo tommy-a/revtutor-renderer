@@ -24,8 +24,10 @@ describe('Whiteboard', () => {
 
     let audioStartObs: Subject<MemberInfo>,
         whiteboardInfoObs: Subject<WhiteboardInfo>,
-        drawablesObs: Subject<Drawable>,
-        pictureUpdatesObs: Subject<PictureDrawable>;
+        pagesObs: Subject<string>,
+        addedDrawablesObs: Subject<Drawable>,
+        changedDrawablesObs: Subject<Drawable>,
+        removedDrawablesObs: Subject<string>;
 
     let dataRetriever: DataRetriever,
         sut: Whiteboard;
@@ -40,19 +42,25 @@ describe('Whiteboard', () => {
         // stub out observables for triggering blazeDb events
         audioStartObs = new Subject<MemberInfo>();
         whiteboardInfoObs = new Subject<WhiteboardInfo>();
-        drawablesObs = new Subject<Drawable>();
-        pictureUpdatesObs = new Subject<PictureDrawable>();
+        pagesObs = new Subject<string>();
+        addedDrawablesObs = new Subject<Drawable>();
+        changedDrawablesObs = new Subject<Drawable>();
+        removedDrawablesObs = new Subject<string>();
 
         dataRetriever = new DataRetriever(new TreeDatabase(false));
         sinon.stub(dataRetriever, 'listenForAudioStart').returns(audioStartObs.asObservable());
         sinon.stub(dataRetriever, 'listenForWhiteboardInfo').returns(whiteboardInfoObs.asObservable());
-        sinon.stub(dataRetriever, 'listenForDrawables').returns(drawablesObs.asObservable());
-        sinon.stub(dataRetriever, 'listenForPictureUpdate').returns(pictureUpdatesObs.asObservable());
+        sinon.stub(dataRetriever, 'listenForPages').returns(pagesObs.asObservable());
+        sinon.stub(dataRetriever, 'listenForAddedDrawables').returns(addedDrawablesObs.asObservable());
+        sinon.stub(dataRetriever, 'listenForChangedDrawables').returns(changedDrawablesObs.asObservable());
+        sinon.stub(dataRetriever, 'listenForRemovedDrawables').returns(removedDrawablesObs.asObservable());
 
         sut = new Whiteboard(TEST_OUTPUT_DIR, {}, dataRetriever);
 
         writeSnapshot = sandbox.stub(sut, 'writeSnapshot').returns({ catch: () => null });
         writeElapsedFrames = sandbox.stub(sut, 'writeElapsedFrames').returns({ catch: () => null });
+
+        pagesObs.next('pageKey');
     });
 
     afterEach(() => {
@@ -81,7 +89,7 @@ describe('Whiteboard', () => {
 
         it('should overwrite the initial dimensions frame when adding the first picture, before the audio starts', async () => {
             whiteboardInfoObs.next({ canvasWidth: 10, canvasHeight: 10, pages: { key: { paperType: 2 } } });
-            drawablesObs.next({ type: 'picture' } as Drawable);
+            addedDrawablesObs.next({ type: 'picture' } as Drawable);
 
             await sut.render();
 
@@ -100,7 +108,7 @@ describe('Whiteboard', () => {
 
         it('should write a single frame for a path update', async () => {
             audioStartObs.next({ audioStatus: 2 });
-            drawablesObs.next({ type: 'path', d2: '' } as any);
+            changedDrawablesObs.next({ type: 'path', d2: {} } as any);
 
             sut.addDelta((1 / sut.fps) * 1000); // add enough for one frame
             await sut.render();
@@ -111,7 +119,7 @@ describe('Whiteboard', () => {
 
         it('should write elapsed frames', async () => {
             audioStartObs.next({ audioStatus: 2 });
-            drawablesObs.next({ type: 'path', d2: '' } as any);
+            changedDrawablesObs.next({ type: 'path', d2: {} } as any);
 
             sut.addDelta(3 * (1 / sut.fps) * 1000); // add enough for three total frames
             await sut.render();
@@ -123,7 +131,7 @@ describe('Whiteboard', () => {
         it('should write a single frame for a transformed picture', async () => {
             // add the initial picture
             audioStartObs.next({ audioStatus: 2 });
-            drawablesObs.next({ type: 'picture' } as Drawable);
+            addedDrawablesObs.next({ type: 'picture' } as Drawable);
 
             await sut.render();
 
@@ -133,7 +141,51 @@ describe('Whiteboard', () => {
             writeSnapshot.resetHistory();
 
             // transform the picture
-            pictureUpdatesObs.next({ key: MOCK_PICTURE.key } as PictureDrawable);
+            changedDrawablesObs.next({ key: MOCK_PICTURE.key } as PictureDrawable);
+
+            sut.addDelta((1 / sut.fps) * 1000); // add enough for one frame
+            await sut.render();
+
+            expect(writeElapsedFrames).not.to.have.been.called;
+            expect(writeSnapshot).to.have.been.calledOnce.calledWithExactly(1);
+        });
+
+        it('should write a single frame for a removed picture', async () => {
+            // add the initial picture
+            audioStartObs.next({ audioStatus: 2 });
+            addedDrawablesObs.next({ type: 'picture' } as Drawable);
+
+            await sut.render();
+
+            expect(writeElapsedFrames).not.to.have.been.called;
+            expect(writeSnapshot).to.have.been.calledOnce.calledWithExactly(0);
+            writeElapsedFrames.resetHistory();
+            writeSnapshot.resetHistory();
+
+            // remove the picture
+            removedDrawablesObs.next(MOCK_PICTURE.key);
+
+            sut.addDelta((1 / sut.fps) * 1000); // add enough for one frame
+            await sut.render();
+
+            expect(writeElapsedFrames).not.to.have.been.called;
+            expect(writeSnapshot).to.have.been.calledOnce.calledWithExactly(1);
+        });
+
+        it('should write a single frame for a removed path', async () => {
+            // add the initial path
+            audioStartObs.next({ audioStatus: 2 });
+            addedDrawablesObs.next({ type: 'path', key: 'key', d2: {} } as any);
+
+            await sut.render();
+
+            expect(writeElapsedFrames).not.to.have.been.called;
+            expect(writeSnapshot).to.have.been.calledOnce.calledWithExactly(0);
+            writeElapsedFrames.resetHistory();
+            writeSnapshot.resetHistory();
+
+            // remove the path
+            removedDrawablesObs.next('key');
 
             sut.addDelta((1 / sut.fps) * 1000); // add enough for one frame
             await sut.render();

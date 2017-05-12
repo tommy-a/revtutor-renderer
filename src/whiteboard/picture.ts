@@ -31,12 +31,12 @@ export class Picture {
     /**
      * @property Unique id
      */
-    get key() { return this.drawable.key; };
+    get key() { return this.drawable.key; }
 
     /**
      * @property Fabric staging object to be added to the whiteboard's canvas
      */
-    get image() { return this._image; };
+    get image() { return this._image; }
     private _image: fabric.Image;
 
     constructor(drawable: PictureDrawable, binaryData: Buffer) {

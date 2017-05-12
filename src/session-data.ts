@@ -56,6 +56,7 @@ export class SessionData {
         }
 
         logger.info(`${updates.length} update(s) decoded from binary file`);
+
         return updates;
     }
 }

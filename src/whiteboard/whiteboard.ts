@@ -7,8 +7,9 @@ import { Subscription } from 'rxjs/Subscription';
 import * as logger from 'winston';
 
 import { ApplicationError, ErrorCode } from '../application-error';
+import { TreeDataEventType } from '../blaze/tree-data-event';
 import { BackgroundLayer } from './background-layer';
-import { DataRetriever, PathDrawable, PictureDrawable, WhiteboardInfo } from './data-retriever';
+import { DataRetriever, Drawable, PathDrawable, PictureDrawable, WhiteboardInfo } from './data-retriever';
 import { PathLayer } from './path-layer';
 import { Picture } from './picture';
 import { PictureLayer } from './picture-layer';
@@ -32,6 +33,7 @@ export class Whiteboard {
 
     private dataRetriever: DataRetriever; // generates observables for listening to blazeDb updates
     private subscription: Subscription; // a set of all active blazeDb subscriptions
+    private drawableTypeMap = new Map<string, string>(); // maps the id of drawables to their type => needed for when drawables are removed
 
     private isStarted = false; // the rendering starts when the audio starts; don't modify the clock until this is true
     private clock = 0; // the millisecond duration into the video that the whiteboard's canvas currently represents
@@ -136,7 +138,7 @@ export class Whiteboard {
             stream.on('data', (chunk: any) => file.write(chunk));
             stream.on('end', () => file.end());
 
-            file.on('close', () => resolve());
+            file.on('close', resolve);
         });
     }
 
@@ -165,7 +167,7 @@ export class Whiteboard {
     private static copyFile(src: string, dst: string): Promise<{}> {
         return new Promise((resolve) => {
             const stream = createReadStream(src);
-            stream.on('end', () => resolve());
+            stream.on('end', resolve);
             stream.pipe(createWriteStream(dst));
         });
     }
@@ -177,20 +179,13 @@ export class Whiteboard {
         );
 
         this.subscription.add(
+            this.dataRetriever.listenForPages()
+                .subscribe(key => this.onNewPage(key))
+        );
+
+        this.subscription.add(
             this.dataRetriever.listenForAudioStart()
                 .subscribe(() => this.onAudioStart())
-        );
-
-        // listen for completed paths and new pictures
-        const [paths, pictures] = this.dataRetriever.listenForDrawables()
-            .partition(d => d.type === 'path');
-
-        this.subscription.add(
-            paths.filter((d: PathDrawable) => d.d2 !== undefined || d.d3 !== undefined)
-                .subscribe((d: PathDrawable) => this.onPathUpdate(d))
-        );
-        this.subscription.add(
-            pictures.subscribe((d: PictureDrawable) => this.onNewPicture(d))
         );
     }
 
@@ -213,38 +208,65 @@ export class Whiteboard {
         }
     }
 
+    private onNewPage(pageKey: string): void {
+        this.subscription.add(
+            this.dataRetriever.listenForAddedDrawables(pageKey)
+                .subscribe(d => this.onAddedDrawable(d))
+        );
+
+        this.subscription.add(
+            this.dataRetriever.listenForChangedDrawables(pageKey)
+                .subscribe(d => this.onChangedDrawable(d))
+        );
+
+        this.subscription.add(
+            this.dataRetriever.listenForRemovedDrawables(pageKey)
+                .subscribe(key => this.onRemovedDrawable(key))
+        );
+    }
+
     private onAudioStart(): void {
         this.isStarted = true;
     }
 
-    private onPathUpdate(drawable: PathDrawable): void {
+    private onAddedDrawable(d: Drawable): void {
         try {
-            this.pathLayer.drawPath(drawable);
+            this.drawableTypeMap.set(d.key, d.type!);
+
+            if (d.type === 'path') {
+                this.pathLayer.drawPath(d as PathDrawable);
+            } else {
+                const drawable = d as PictureDrawable;
+                const picture = new Picture(drawable, this.pictureBuffers[drawable.imageURL!]);
+                this.pictureLayer.addPicture(picture);
+            }
         } catch (err) {
             logger.error(err);
             throw(err);
         }
     }
 
-    private onNewPicture(drawable: PictureDrawable): void {
+    private onChangedDrawable(d: Drawable): void {
         try {
-            const picture = new Picture(drawable, this.pictureBuffers[drawable.imageURL!]);
-            this.pictureLayer.addPicture(picture);
-
-            // subscribe to future transformation updates
-            this.subscription.add(
-                this.dataRetriever.listenForPictureUpdate(drawable.path)
-                    .subscribe(d => this.onPictureUpdate(d))
-            );
+            if (d.type === 'path') {
+                this.pathLayer.drawPath(d as PathDrawable);
+            } else {
+                this.pictureLayer.transformPicture(d as PictureDrawable);
+            }
         } catch (err) {
             logger.error(err);
             throw(err);
         }
     }
 
-    private onPictureUpdate(drawable: PictureDrawable): void {
+    private onRemovedDrawable(key: string): void {
         try {
-            this.pictureLayer.transformPicture(drawable.key, drawable.transform);
+            const type = this.drawableTypeMap.get(key);
+            if (type === 'path') {
+                this.pathLayer.removePath(key);
+            } else {
+                this.pictureLayer.removePicture(key);
+            }
         } catch (err) {
             logger.error(err);
             throw(err);

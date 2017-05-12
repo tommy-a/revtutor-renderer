@@ -15,9 +15,22 @@ export class PathLayer extends CanvasLayer {
      * Incrementally draws a path onto a staging canvas, as well as marks _isDirty to true
      * @param drawable - a PathDrawable object with the properties for the path to be drawn
      */
-    drawPath(drawable: PathDrawable): void {
-        const path = PathFactory.parsePath(drawable) as any;
-        this.paths.set(drawable.key, path);
+    drawPath(d: PathDrawable): void {
+        if (!d.d2 && !d.d3) {
+            return;
+        }
+
+        const path = PathFactory.parsePath(d) as any;
+        this.paths.set(d.key, path);
+        this.redraw();
+    }
+
+    /**
+     * Removes a previously drawn path, as well as marks _isDirty to true
+     * @param key - the key of the path object to remove
+     */
+    removePath(key: string): void {
+        this.paths.delete(key);
         this.redraw();
     }
 

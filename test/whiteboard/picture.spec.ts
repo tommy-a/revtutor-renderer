@@ -17,7 +17,7 @@ describe('Picture', () => {
     };
 
     function createTransformStr(a: number, b: number, c: number, d: number, tx: number, ty: number): string {
-        return '[' + a + ', ' + b + ', ' + c + ', ' + d + ', ' + tx + ', ' + ty + ']';
+        return `[${a}, ${b}, ${c}, ${d}, ${tx}, ${ty}]`;
     }
 
     const TR_SCALE = 0.5,
@@ -34,7 +34,6 @@ describe('Picture', () => {
 
     beforeEach(() => {
         drawable = {
-            path: '',
             type: 'picture',
             key: '-KTKhY0ORZxKr7a8Esl7',
             imageURL: 'test.jpeg',

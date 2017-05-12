@@ -1,6 +1,6 @@
 import { Observable } from 'rxjs/Observable';
 
-import { TreeDataEventType } from '../blaze/tree-data-event';
+import { TreeDataEvent, TreeDataEventType } from '../blaze/tree-data-event';
 import { TreeDatabase } from '../blaze/tree-database';
 import { PageType } from './background-layer';
 
@@ -24,9 +24,8 @@ export enum PenType {
 }
 
 export interface Drawable {
-    path: string;
     key: string;
-    type: string;
+    type?: string; // not present when removing a drawable
 }
 
 export interface PathDrawable extends Drawable {
@@ -66,35 +65,36 @@ export class DataRetriever {
             .filter(info => info.audioStatus === 2);
     }
 
-    // TODO: create an observable for a specific page, instead of just the first
-    listenForDrawables(): Observable<Drawable> {
-        return this.blazeDb.reference('drawablesData')
-            .changes(new Set([TreeDataEventType.ChildAdded, TreeDataEventType.ChildChanged]))
+    listenForPages(): Observable<string> {
+        return this.blazeDb.reference('whiteboard/pages')
+            .changes(new Set([TreeDataEventType.ChildAdded]))
             .map(ev => {
-                const json = ev.value.toJSON() as { [key: string]: any };
-                const drawableIds = Object.keys(json);
-
-                const key = drawableIds.pop()!;
-                const drawable = json[key] as Drawable;
-
-                drawable.path = `${ev.value.path}/${key}`;
-                drawable.key = key;
-
-                return drawable;
+                return ev.value.key;
             });
     }
 
-    listenForPictureUpdate(path: string): Observable<PictureDrawable> {
-        return this.blazeDb.reference(path)
-            .changes(new Set([TreeDataEventType.ValueChanged]))
-            .map(ev => {
-                const drawable: PictureDrawable = (ev.value.toJSON() as any);
-                const key = ev.value.key;
+    listenForAddedDrawables(pageKey: string): Observable<Drawable> {
+        return this.blazeDb.reference(`drawablesData/${pageKey}`)
+            .changes(new Set([TreeDataEventType.ChildAdded]))
+            .filter((ev) => !ev.value.value) // make sure it's an object (i.e. not 'PLACE_HOLDER')
+            .map(ev => this.getDrawable(ev));
+    }
 
-                drawable.path = `${ev.value.path}/${key}`;
-                drawable.key = key;
+    listenForChangedDrawables(pageKey: string): Observable<Drawable> {
+        return this.blazeDb.reference(`drawablesData/${pageKey}`)
+            .changes(new Set([TreeDataEventType.ChildChanged]))
+            .map(ev => this.getDrawable(ev));
+    }
 
-                return drawable;
-            });
+    listenForRemovedDrawables(pageKey: string): Observable<string> {
+        return this.blazeDb.reference(`drawablesData/${pageKey}`)
+            .changes(new Set([TreeDataEventType.ChildRemoved]))
+            .map(ev => ev.value.key);
+    }
+
+    private getDrawable(ev: TreeDataEvent): Drawable {
+        const drawable = (ev.value.toJSON() as any) as Drawable;
+        drawable.key = ev.value.key;
+        return drawable;
     }
 }

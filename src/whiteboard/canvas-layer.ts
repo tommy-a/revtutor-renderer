@@ -11,18 +11,18 @@ export class CanvasLayer {
     /**
      * @property The underlying canvas that is drawn to
      */
-    get canvas() { return this._canvas; };
+    get canvas() { return this._canvas; }
     protected _canvas: Canvas;
 
     /**
      * @property Width in pixels of the underlying canvas
      */
-    get width(): number { return this.canvas.getWidth(); };
+    get width(): number { return this.canvas.getWidth(); }
 
     /**
      * @property Height in pixels of the underlying canvas
      */
-    get height(): number { return this.canvas.getHeight(); };
+    get height(): number { return this.canvas.getHeight(); }
 
     /**
      * @property Whether or not the canvas has been modified since the last call to dataUrl()

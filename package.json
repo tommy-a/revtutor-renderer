@@ -22,7 +22,7 @@
   "dependencies": {
     "cuint": "0.2.2",
     "fabric": "1.7.11",
-    "rxjs": "5.3.1",
+    "rxjs": "5.4.0",
     "winston": "2.3.1",
     "yargs": "8.0.1"
   },
@@ -40,8 +40,8 @@
     "sinon": "2.2.0",
     "sinon-chai": "2.10.0",
     "ts-node": "3.0.4",
-    "tslint": "4.5.1",
-    "tslint-microsoft-contrib": "4.0.1",
+    "tslint": "5.2.0",
+    "tslint-microsoft-contrib": "5.0.0",
     "typescript": "2.3.2"
   }
 }

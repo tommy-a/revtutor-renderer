@@ -9,7 +9,6 @@ describe('PathLayer', () => {
 
     beforeEach(() => {
         path = {
-            path: '',
             key: 'path',
             type: 'path',
             isEraser: false,
@@ -50,6 +49,23 @@ describe('PathLayer', () => {
             expect(spy).to.have.been.calledTwice;
             expect(spy.firstCall.args[0].path[0]).to.deep.equal([ 'M', 42, 42 ]);
             expect(spy.secondCall.args[0].path[0]).to.deep.equal([ 'M', 7, 7 ]);
+        });
+    });
+
+    describe('removePath()', () => {
+        it('should remove a previously drawn path from the canvas, and set _isDirty to true', () => {
+            const spy = sinon.spy(sut.canvas, 'add');
+
+            // draw the first path
+            sut.drawPath(path);
+
+            spy.reset();
+
+            // remove the path
+            sut.removePath(path.key);
+
+            expect(sut.isDirty).to.be.true;
+            expect(spy).not.to.have.been.called;
         });
     });
 });
