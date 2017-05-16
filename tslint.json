@@ -28,6 +28,7 @@
     "newline-before-return": false,
     "no-unnecessary-callback-wrapper": false,
     "no-unused-expression": false,
-    "max-line-length": [false]
+    "max-line-length": [false],
+    "linebreak-style": [false]
   }
 }

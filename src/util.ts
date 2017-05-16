@@ -105,6 +105,8 @@ export async function loadImage(buffer: Buffer): Promise<fabric.Image> {
             resolve(new fabric.Image(canvas as any, {}));
         };
 
+        canvas.onerror = (err) => { throw err; };
+
         canvas.src = buffer;
     });
 }
