@@ -55,6 +55,10 @@ export async function getPictureBuffers(urls: string[]): Promise<UrlMap> {
     return new Promise<UrlMap>(async (resolve) => {
         const buffers: UrlMap = {};
 
+        if (urls.length === 0) {
+            resolve();
+        }
+
         urls.forEach(url => {
             https.get(url, (response) => {
                 const chunks: Buffer[] = [];

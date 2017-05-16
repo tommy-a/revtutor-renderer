@@ -145,22 +145,17 @@ export class Whiteboard {
     // write frames at a rate of 30fps for the duration that has elapsed inbetween changes;
     // these are simply copies of the most recent frame to have been written
     private async writeElapsedFrames(count: number): Promise<{}> {
-        return new Promise((resolve) => {
+        return new Promise(async (resolve) => {
             logger.verbose(`Rendering elapsed frames: ${this.frameIdx + 1} - ${this.frameIdx + count}`);
 
             const src = `${this.outputDir}/${this.frameIdx}.png`;
-
-            let fileCount = 0;
             for (let i = 1; i <= count; ++i) {
                 const dst = `${this.outputDir}/${this.frameIdx + i}.png`;
-                Whiteboard.copyFile(src, dst).then(() => {
-                    if (++fileCount === count) {
-                        resolve();
-                    }
-                });
+                await Whiteboard.copyFile(src, dst);
             }
 
             this.frameIdx += count;
+            resolve();
         });
     }
 
