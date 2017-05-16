@@ -99,9 +99,12 @@ async function createTestPicture(length: number, key = ''): Promise<Picture> {
             height: length
         };
 
-        const picture = new Picture(drawable, new Buffer(0));
         const squareUrl = drawSquare(length);
-        picture.image.setSrc(squareUrl, () => resolve(picture), {} as any);
+        fabric.Image.fromURL(squareUrl, (image) => {
+            const picture = new Picture(new Buffer(0), image);
+            picture.setDrawable(drawable);
+            resolve(picture);
+        });
     });
 }
 

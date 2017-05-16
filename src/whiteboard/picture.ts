@@ -39,22 +39,26 @@ export class Picture {
     get image() { return this._image; }
     private _image: fabric.Image;
 
-    constructor(drawable: PictureDrawable, binaryData: Buffer) {
-        this.drawable = drawable;
+    constructor(binaryData: Buffer, image: fabric.Image) {
         this.binaryData = binaryData;
+        this._image = image;
+    }
+
+    /**
+     * Decodes metadata and appropriately transforms the staged image
+     * @param drawable - the PictureDrawable representing how to transform the image
+     */
+    setDrawable(drawable: PictureDrawable): void {
+        this.drawable = drawable;
 
         // for now, only JPEGs need to be decoded for their metadata,
         // to adjust for their orientation
-        const url = drawable.imageURL!;
+        const url = this.drawable.imageURL!;
         if (url.slice(url.lastIndexOf('.') + 1) === 'jpeg') {
             this.decodeImage();
         }
 
-        const canvas = new Canvas.Image();
-        canvas.src = this.binaryData;
-
-        this._image = new fabric.Image(canvas as any, {});
-        this.applyTransform(drawable.transform);
+        this.applyTransform(this.drawable.transform);
     }
 
     /**

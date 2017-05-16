@@ -2,7 +2,7 @@ export enum ErrorCode {
     Uncaught = 1, // node's default error code
     InvalidInput = 2,
     DecodeUpdates = 3,
-    GetPictureBuffers = 4,
+    GetPictures = 4,
     RenderFail = 5,
     WriteFail = 6
 }

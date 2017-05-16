@@ -12,6 +12,15 @@ export class PictureLayer extends CanvasLayer {
     private pictures = new Map<string, Picture>();
 
     /**
+     * Checks whether or not a picture has already been added
+     * @param key - the key of the picture to check for
+     * @returns true if the picture has been added, otherwise false
+     */
+    hasPicture(key: string): boolean {
+        return (this.pictures.get(key) !== undefined);
+    }
+
+    /**
      * Adds a picture drawable to the canvas to be drawn, as well as marks _isDirty to true
      * @param drawable - a Picture object containing the fabric image to be drawn
      */

@@ -1,9 +1,14 @@
+import * as Canvas from 'canvas';
+import * as Fabric from 'fabric';
+const fabric = (Fabric as any).fabric as typeof Fabric;
 import * as https from 'https';
 import * as logger from 'winston';
 
 import { ErrorCode } from './application-error';
 import { SessionUpdate } from './session-data';
-import { UrlMap } from './whiteboard/whiteboard';
+import { Picture } from './whiteboard/picture';
+
+export type UrlMap = Map<string, Picture>;
 
 /**
  * Logs an error message and exits the main program with a given ErrorCode
@@ -47,34 +52,59 @@ export function searchForUrls(updates: SessionUpdate[]): string[] {
 }
 
 /**
- * Downloads the binary data for a given set of https url strings
+ * Downloads the binary data for a given set of https url strings, and
+ * creates a Picture object for each one
  * @param urls - an array of url strings
- * @returns a Promise<UrlMap> that maps urls to their respective Buffer
+ * @returns a Promise<UrlMap> that maps urls to their respective Picture object
  */
-export async function getPictureBuffers(urls: string[]): Promise<UrlMap> {
-    return new Promise<UrlMap>(async (resolve) => {
-        const buffers: UrlMap = {};
+export async function getPictures(urls: string[]): Promise<UrlMap> {
+    const pictures: UrlMap = new Map<string, Picture>();
 
-        if (urls.length === 0) {
-            resolve();
-        }
+    for (const url of urls) {
+        const buffer = await getImageBuffer(url);
+        const image = await loadImage(buffer);
+        const picture = new Picture(buffer, image);
 
-        urls.forEach(url => {
-            https.get(url, (response) => {
-                const chunks: Buffer[] = [];
+        pictures.set(url, picture);
+    }
 
-                response.on('data', (c: Buffer) => {
-                    chunks.push(c);
-                });
+    return pictures;
+}
 
-                response.on('end', () => {
-                    buffers[url] = Buffer.concat(chunks);
+/**
+ * Downloads the binary data for a given url
+ * @param url - the https url string of the image to download
+ * @returns a Promise<Buffer> that resolves to the downloaded buffer
+ */
+export async function getImageBuffer(url: string): Promise<Buffer> {
+    return new Promise<Buffer>((resolve) => {
+        https.get(url, (response) => {
+            const chunks: Buffer[] = [];
 
-                    if (Object.keys(buffers).length === urls.length) {
-                        resolve(buffers);
-                    }
-                });
+            response.on('data', (c: Buffer) => {
+                chunks.push(c);
+            });
+
+            response.on('end', () => {
+                resolve(Buffer.concat(chunks));
             });
         });
+    });
+}
+
+/**
+ * Creates a fabric image from an underlying binary buffer
+ * @param buffer - the src binary data to initialize the image with
+ * @returns a Promise<fabric.Image> that resolves to the loaded image
+ */
+export async function loadImage(buffer: Buffer): Promise<fabric.Image> {
+    return new Promise<fabric.Image>((resolve) => {
+        const canvas = new Canvas.Image();
+
+        canvas.onload = () => {
+            resolve(new fabric.Image(canvas as any, {}));
+        };
+
+        canvas.src = buffer;
     });
 }

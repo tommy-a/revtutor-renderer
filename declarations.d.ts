@@ -1,6 +1,7 @@
 declare module 'canvas' {
     export class Image {
         src: Buffer;
+        onload: () => void;
     }
 }
 

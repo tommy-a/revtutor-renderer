@@ -36,7 +36,7 @@
     "@types/winston": "2.3.2",
     "chai": "3.5.0",
     "data-uri-to-buffer": "0.0.4",
-    "mocha": "3.3.0",
+    "mocha": "3.4.1",
     "sinon": "2.2.0",
     "sinon-chai": "2.10.0",
     "ts-node": "3.0.4",

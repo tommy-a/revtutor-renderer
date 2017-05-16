@@ -1,6 +1,9 @@
 import { expect } from '../common';
 
+import * as Canvas from 'canvas';
 import * as dataUriToBuffer from 'data-uri-to-buffer';
+import * as Fabric from 'fabric';
+const fabric = (Fabric as any).fabric as typeof Fabric;
 
 import { PictureDrawable } from '../../src/whiteboard/data-retriever';
 import { Picture } from '../../src/whiteboard/picture';
@@ -52,12 +55,14 @@ describe('Picture', () => {
             const src = b[0] as string;
             const orientationRotation = b[1] as number;
 
-            it(`should render ${rotation} degree rotation for ${orientationRotation} degree orientation`, () => {
-                const imageData = dataUriToBuffer(src);
-                drawable.transform = transform;
-                sut = new Picture(drawable, imageData);
+            it(`should render ${rotation} degree rotation for ${orientationRotation} degree orientation`, async () => {
+                const buffer = dataUriToBuffer(src);
+                const image = await createImage(buffer);
 
-                const image = sut.image;
+                sut = new Picture(buffer, image);
+
+                drawable.transform = transform;
+                sut.setDrawable(drawable);
 
                 let width: number, height: number;
                 if (orientationRotation === 0 || orientationRotation === 180) {
@@ -78,11 +83,13 @@ describe('Picture', () => {
     });
 
     describe('applyTransform', () => {
-        it('should render a new transformation', () => {
-            const imageData = dataUriToBuffer(TEST_IMAGE_SRC.NORMAL);
-            sut = new Picture(drawable, imageData);
+        it('should render a new transformation', async () => {
+            const buffer = dataUriToBuffer(TEST_IMAGE_SRC.NORMAL);
+            const image = await createImage(buffer);
 
-            const image = sut.image;
+            sut = new Picture(buffer, image);
+            sut.setDrawable(drawable);
+
             expect(image.getAngle()).to.equal(0);
 
             sut.applyTransform(TR_90_DEGREE_ROTATION);
@@ -95,3 +102,20 @@ describe('Picture', () => {
         });
     });
 });
+
+/**
+ * Creates a fabric image from a binary data buffer
+ * @param buffer - the source binary data
+ * @returns a Promise for the resulting image
+ */
+async function createImage(buffer: Buffer): Promise<fabric.Image> {
+    return new Promise<fabric.Image>((resolve) => {
+        const canvas = new Canvas.Image();
+
+        canvas.onload = () => {
+            resolve(new fabric.Image(canvas as any, {}));
+        };
+
+        canvas.src = buffer;
+    });
+}

@@ -14,8 +14,10 @@ describe('Whiteboard', () => {
     const TEST_OUTPUT_DIR = './snapshots';
     const MOCK_PICTURE = {
         key: '-Kj0BbjRzTOss_JR4rth',
+        url: 'www.hi.com',
         image: new fabric.Rect({ width: 10, height: 10}),
-        applyTransform: () => null
+        applyTransform: () => null,
+        setDrawable: () => null
     };
 
     let sandbox: sinon.SinonSandbox,
@@ -36,7 +38,6 @@ describe('Whiteboard', () => {
         sandbox = sinon.sandbox.create();
 
         // stub dependencies
-        sandbox.stub(picture, 'Picture').returns(MOCK_PICTURE);
         sandbox.stub(pathFactory, 'PathFactory').returns({ parsePath: MOCK_PICTURE.image });
 
         // stub out observables for triggering blazeDb events
@@ -55,7 +56,10 @@ describe('Whiteboard', () => {
         sinon.stub(dataRetriever, 'listenForChangedDrawables').returns(changedDrawablesObs.asObservable());
         sinon.stub(dataRetriever, 'listenForRemovedDrawables').returns(removedDrawablesObs.asObservable());
 
-        sut = new Whiteboard(TEST_OUTPUT_DIR, {}, dataRetriever);
+        const images = new Map<string, picture.Picture>();
+        images.set(MOCK_PICTURE.url, MOCK_PICTURE as any);
+
+        sut = new Whiteboard(TEST_OUTPUT_DIR, images, dataRetriever);
 
         writeSnapshot = sandbox.stub(sut, 'writeSnapshot').returns({ catch: () => null });
         writeElapsedFrames = sandbox.stub(sut, 'writeElapsedFrames').returns({ catch: () => null });
@@ -131,7 +135,7 @@ describe('Whiteboard', () => {
         it('should write a single frame for a transformed picture', async () => {
             // add the initial picture
             audioStartObs.next({ audioStatus: 2 });
-            addedDrawablesObs.next({ type: 'picture' } as Drawable);
+            addedDrawablesObs.next({ type: 'picture', imageURL: MOCK_PICTURE.url } as any);
 
             await sut.render();
 
@@ -141,7 +145,7 @@ describe('Whiteboard', () => {
             writeSnapshot.resetHistory();
 
             // transform the picture
-            changedDrawablesObs.next({ key: MOCK_PICTURE.key } as PictureDrawable);
+            changedDrawablesObs.next({ key: MOCK_PICTURE.key, imageURL: MOCK_PICTURE.url } as PictureDrawable);
 
             sut.addDelta((1 / sut.fps) * 1000); // add enough for one frame
             await sut.render();
@@ -153,7 +157,7 @@ describe('Whiteboard', () => {
         it('should write a single frame for a removed picture', async () => {
             // add the initial picture
             audioStartObs.next({ audioStatus: 2 });
-            addedDrawablesObs.next({ type: 'picture' } as Drawable);
+            addedDrawablesObs.next({ type: 'picture', imageURL: MOCK_PICTURE.url } as any);
 
             await sut.render();
 

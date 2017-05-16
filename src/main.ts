@@ -6,7 +6,7 @@ import { ApplicationError, ErrorCode } from './application-error';
 import { AttributedModification, ModificationSource } from './blaze/modification';
 import { TreeDatabase } from './blaze/tree-database';
 import { SessionData, SessionUpdate } from './session-data';
-import { getPictureBuffers, killProcess, searchForUrls } from './util';
+import { getPictures, killProcess, searchForUrls } from './util';
 import { DataRetriever } from './whiteboard/data-retriever';
 import { Whiteboard } from './whiteboard/whiteboard';
 
@@ -52,13 +52,13 @@ logger.configure({
 
     logger.info(`Downloading ${urls.length} picture(s)`);
 
-    const pictureBuffers = await getPictureBuffers(urls).catch(err => {
-        killProcess(ErrorCode.GetPictureBuffers, err);
+    const pictures = await getPictures(urls).catch(err => {
+        killProcess(ErrorCode.GetPictures, err);
     });
 
     // setup db and whiteboard renderer
     const blazeDb = new TreeDatabase(false);
-    const whiteboard = new Whiteboard(outputDir, pictureBuffers!, new DataRetriever(blazeDb));
+    const whiteboard = new Whiteboard(outputDir, pictures!, new DataRetriever(blazeDb));
 
     logger.info('Starting frame rendering');
 

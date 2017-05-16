@@ -16,10 +16,6 @@ export class PathLayer extends CanvasLayer {
      * @param drawable - a PathDrawable object with the properties for the path to be drawn
      */
     drawPath(d: PathDrawable): void {
-        if (!d.d2 && !d.d3) {
-            return;
-        }
-
         const path = PathFactory.parsePath(d) as any;
         this.paths.set(d.key, path);
         this.redraw();

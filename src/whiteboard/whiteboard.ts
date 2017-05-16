@@ -8,13 +8,12 @@ import * as logger from 'winston';
 
 import { ApplicationError, ErrorCode } from '../application-error';
 import { TreeDataEventType } from '../blaze/tree-data-event';
+import { UrlMap } from '../util';
 import { BackgroundLayer } from './background-layer';
 import { DataRetriever, Drawable, PathDrawable, PictureDrawable, WhiteboardInfo } from './data-retriever';
 import { PathLayer } from './path-layer';
 import { Picture } from './picture';
 import { PictureLayer } from './picture-layer';
-
-export type UrlMap = { [url: string]: Buffer };
 
 /**
  * @class Class that listens to incremental blaze updates and renders visible changes
@@ -29,7 +28,7 @@ export class Whiteboard {
     readonly fps = 30; // frame rate to adhere to when writing frames
 
     private outputDir: string; // directory to write frames to
-    private pictureBuffers: UrlMap; // maps picture urls to their raw binary data
+    private pictures: UrlMap; // maps picture urls to a Picture
 
     private dataRetriever: DataRetriever; // generates observables for listening to blazeDb updates
     private subscription: Subscription; // a set of all active blazeDb subscriptions
@@ -45,9 +44,9 @@ export class Whiteboard {
 
     private frameIdx = 0; // the last frame to have been written (i.e `{frameIdx}.png`)
 
-    constructor(outputDir: string, pictureBuffers: UrlMap, dataRetriever: DataRetriever) {
+    constructor(outputDir: string, pictures: UrlMap, dataRetriever: DataRetriever) {
         this.outputDir = outputDir;
-        this.pictureBuffers = pictureBuffers;
+        this.pictures = pictures;
 
         this.dataRetriever = dataRetriever;
         this.subscription = new Subscription();
@@ -206,11 +205,15 @@ export class Whiteboard {
     private onNewPage(pageKey: string): void {
         this.subscription.add(
             this.dataRetriever.listenForAddedDrawables(pageKey)
+                .filter((d: PathDrawable & PictureDrawable) =>
+                            d.d2 !== undefined || d.d3 !== undefined || d.imageURL !== undefined)
                 .subscribe(d => this.onAddedDrawable(d))
         );
 
         this.subscription.add(
             this.dataRetriever.listenForChangedDrawables(pageKey)
+                .filter((d: PathDrawable & PictureDrawable) =>
+                                d.d2 !== undefined || d.d3 !== undefined || d.imageURL !== undefined)
                 .subscribe(d => this.onChangedDrawable(d))
         );
 
@@ -231,9 +234,7 @@ export class Whiteboard {
             if (d.type === 'path') {
                 this.pathLayer.drawPath(d as PathDrawable);
             } else {
-                const drawable = d as PictureDrawable;
-                const picture = new Picture(drawable, this.pictureBuffers[drawable.imageURL!]);
-                this.pictureLayer.addPicture(picture);
+                this.addPicture(d as PictureDrawable);
             }
         } catch (err) {
             logger.error(err);
@@ -243,10 +244,18 @@ export class Whiteboard {
 
     private onChangedDrawable(d: Drawable): void {
         try {
+            this.drawableTypeMap.set(d.key, d.type!);
+
             if (d.type === 'path') {
                 this.pathLayer.drawPath(d as PathDrawable);
             } else {
-                this.pictureLayer.transformPicture(d as PictureDrawable);
+                const drawable = d as PictureDrawable;
+
+                if (!this.pictureLayer.hasPicture(drawable.imageURL!)) {
+                    this.addPicture(drawable);
+                } else {
+                    this.pictureLayer.transformPicture(drawable);
+                }
             }
         } catch (err) {
             logger.error(err);
@@ -266,5 +275,11 @@ export class Whiteboard {
             logger.error(err);
             throw(err);
         }
+    }
+
+    private addPicture(d: PictureDrawable): void {
+        const picture = this.pictures.get(d.imageURL!)!;
+        picture.setDrawable(d);
+        this.pictureLayer.addPicture(picture);
     }
 }
