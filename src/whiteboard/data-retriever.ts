@@ -5,6 +5,7 @@ import { TreeDatabase } from '../blaze/tree-database';
 import { PageType } from './background-layer';
 
 export type PageInfo = {
+    key: string;
     paperType: PageType;
 };
 
@@ -14,8 +15,15 @@ export type WhiteboardInfo = {
     pages: {[key: string]: PageInfo};
 };
 
+export enum SessionMemberRole {
+    Student = 1,
+    Tutor = 2
+}
+
 export type MemberInfo = {
     audioStatus: number;
+    role: SessionMemberRole;
+    currentPageFirebase?: string;
 };
 
 export enum PenType {
@@ -65,12 +73,20 @@ export class DataRetriever {
             .filter(info => info.audioStatus === 2);
     }
 
-    listenForPages(): Observable<string> {
+    listenForPageUpdates(): Observable<PageInfo> {
         return this.blazeDb.reference('whiteboard/pages')
-            .changes(new Set([TreeDataEventType.ChildAdded]))
+            .changes(new Set([TreeDataEventType.ChildAdded, TreeDataEventType.ChildChanged]))
             .map(ev => {
-                return ev.value.key;
+                const pageInfo = (ev.value.toJSON() as any) as PageInfo;
+                pageInfo.key = ev.value.key;
+                return pageInfo;
             });
+    }
+
+    listenForMemberInfoUpdates(): Observable<MemberInfo> {
+        return this.blazeDb.reference('session/members')
+            .changes(new Set([TreeDataEventType.ChildChanged]))
+            .map(ev => ev.value.toJSON() as MemberInfo);
     }
 
     listenForAddedDrawables(pageKey: string): Observable<Drawable> {

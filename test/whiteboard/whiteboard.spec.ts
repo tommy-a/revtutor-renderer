@@ -5,7 +5,7 @@ const fabric = (Fabric as any).fabric as typeof Fabric;
 import { Subject } from 'rxjs/Subject';
 
 import { TreeDatabase } from '../../src/blaze/tree-database';
-import { DataRetriever, Drawable, MemberInfo, PictureDrawable, WhiteboardInfo } from '../../src/whiteboard/data-retriever';
+import { DataRetriever, Drawable, MemberInfo, PageInfo, PictureDrawable, SessionMemberRole, WhiteboardInfo } from '../../src/whiteboard/data-retriever';
 import * as pathFactory from '../../src/whiteboard/paths/path-factory';
 import * as picture from '../../src/whiteboard/picture';
 import { Whiteboard } from '../../src/whiteboard/whiteboard';
@@ -26,7 +26,8 @@ describe('Whiteboard', () => {
 
     let audioStartObs: Subject<MemberInfo>,
         whiteboardInfoObs: Subject<WhiteboardInfo>,
-        pagesObs: Subject<string>,
+        pageUpdatesObs: Subject<PageInfo>,
+        memberInfoUpdates: Subject<MemberInfo>,
         addedDrawablesObs: Subject<Drawable>,
         changedDrawablesObs: Subject<Drawable>,
         removedDrawablesObs: Subject<string>;
@@ -34,7 +35,7 @@ describe('Whiteboard', () => {
     let dataRetriever: DataRetriever,
         sut: Whiteboard;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         sandbox = sinon.sandbox.create();
 
         // stub dependencies
@@ -43,7 +44,8 @@ describe('Whiteboard', () => {
         // stub out observables for triggering blazeDb events
         audioStartObs = new Subject<MemberInfo>();
         whiteboardInfoObs = new Subject<WhiteboardInfo>();
-        pagesObs = new Subject<string>();
+        pageUpdatesObs = new Subject<PageInfo>();
+        memberInfoUpdates = new Subject<MemberInfo>();
         addedDrawablesObs = new Subject<Drawable>();
         changedDrawablesObs = new Subject<Drawable>();
         removedDrawablesObs = new Subject<string>();
@@ -51,7 +53,8 @@ describe('Whiteboard', () => {
         dataRetriever = new DataRetriever(new TreeDatabase(false));
         sinon.stub(dataRetriever, 'listenForAudioStart').returns(audioStartObs.asObservable());
         sinon.stub(dataRetriever, 'listenForWhiteboardInfo').returns(whiteboardInfoObs.asObservable());
-        sinon.stub(dataRetriever, 'listenForPages').returns(pagesObs.asObservable());
+        sinon.stub(dataRetriever, 'listenForPageUpdates').returns(pageUpdatesObs.asObservable());
+        sinon.stub(dataRetriever, 'listenForMemberInfoUpdates').returns(memberInfoUpdates.asObservable());
         sinon.stub(dataRetriever, 'listenForAddedDrawables').returns(addedDrawablesObs.asObservable());
         sinon.stub(dataRetriever, 'listenForChangedDrawables').returns(changedDrawablesObs.asObservable());
         sinon.stub(dataRetriever, 'listenForRemovedDrawables').returns(removedDrawablesObs.asObservable());
@@ -61,10 +64,18 @@ describe('Whiteboard', () => {
 
         sut = new Whiteboard(TEST_OUTPUT_DIR, images, dataRetriever);
 
-        writeSnapshot = sandbox.stub(sut, 'writeSnapshot').returns({ catch: () => null });
+        writeSnapshot = sandbox.stub(sut, 'writeSnapshot').returns({
+            catch: () => (sut as any).currentPage.getSnapshot() // force fire this to clear isDirty
+        });
         writeElapsedFrames = sandbox.stub(sut, 'writeElapsedFrames').returns({ catch: () => null });
 
-        pagesObs.next('pageKey');
+        // set the dimensions and render the initial frame
+        whiteboardInfoObs.next({ canvasWidth: 10, canvasHeight: 10 } as any);
+        pageUpdatesObs.next({ key: 'pageA' } as any);
+        await sut.render();
+
+        writeSnapshot.resetHistory();
+        writeElapsedFrames.resetHistory();
     });
 
     afterEach(() => {
@@ -78,7 +89,7 @@ describe('Whiteboard', () => {
         });
 
         it('should move the clock forward when isStarted is true', () => {
-            audioStartObs.next({ audioStatus: 2 });
+            audioStartObs.next({ audioStatus: 2 } as any);
             sut.addDelta(1);
             expect((sut as any).clock).to.equal(1);
         });
@@ -91,18 +102,8 @@ describe('Whiteboard', () => {
             expect(writeSnapshot).not.to.have.been.called;
         });
 
-        it('should overwrite the initial dimensions frame when adding the first picture, before the audio starts', async () => {
-            whiteboardInfoObs.next({ canvasWidth: 10, canvasHeight: 10, pages: { key: { paperType: 2 } } });
-            addedDrawablesObs.next({ type: 'picture' } as Drawable);
-
-            await sut.render();
-
-            expect(writeElapsedFrames).not.to.have.been.called;
-            expect(writeSnapshot).to.have.been.calledOnce.calledWithExactly(0);
-        });
-
         it('should not write a frame when the audio starts', async () => {
-            audioStartObs.next({ audioStatus: 2 });
+            audioStartObs.next({ audioStatus: 2 } as any);
 
             await sut.render();
 
@@ -111,7 +112,7 @@ describe('Whiteboard', () => {
         });
 
         it('should write a single frame for a path update', async () => {
-            audioStartObs.next({ audioStatus: 2 });
+            audioStartObs.next({ audioStatus: 2 } as any);
             changedDrawablesObs.next({ type: 'path', d2: {} } as any);
 
             sut.addDelta((1 / sut.fps) * 1000); // add enough for one frame
@@ -122,7 +123,7 @@ describe('Whiteboard', () => {
         });
 
         it('should write elapsed frames', async () => {
-            audioStartObs.next({ audioStatus: 2 });
+            audioStartObs.next({ audioStatus: 2 } as any);
             changedDrawablesObs.next({ type: 'path', d2: {} } as any);
 
             sut.addDelta(3 * (1 / sut.fps) * 1000); // add enough for three total frames
@@ -134,7 +135,7 @@ describe('Whiteboard', () => {
 
         it('should write a single frame for a transformed picture', async () => {
             // add the initial picture
-            audioStartObs.next({ audioStatus: 2 });
+            audioStartObs.next({ audioStatus: 2 } as any);
             addedDrawablesObs.next({ type: 'picture', imageURL: MOCK_PICTURE.url } as any);
 
             await sut.render();
@@ -156,7 +157,7 @@ describe('Whiteboard', () => {
 
         it('should write a single frame for a removed picture', async () => {
             // add the initial picture
-            audioStartObs.next({ audioStatus: 2 });
+            audioStartObs.next({ audioStatus: 2 } as any);
             addedDrawablesObs.next({ type: 'picture', imageURL: MOCK_PICTURE.url } as any);
 
             await sut.render();
@@ -178,7 +179,7 @@ describe('Whiteboard', () => {
 
         it('should write a single frame for a removed path', async () => {
             // add the initial path
-            audioStartObs.next({ audioStatus: 2 });
+            audioStartObs.next({ audioStatus: 2 } as any);
             addedDrawablesObs.next({ type: 'path', key: 'key', d2: {} } as any);
 
             await sut.render();
@@ -195,6 +196,26 @@ describe('Whiteboard', () => {
             await sut.render();
 
             expect(writeElapsedFrames).not.to.have.been.called;
+            expect(writeSnapshot).to.have.been.calledOnce.calledWithExactly(1);
+        });
+
+        it('should write a single frame when the student\'s page has changed', async () => {
+            audioStartObs.next({ audioStatus: 2 } as any);
+
+            sut.addDelta((1 / sut.fps) * 1000); // add enough for one frame
+            await sut.render();
+
+            pageUpdatesObs.next({ key: 'pageA' } as any);
+            memberInfoUpdates.next({
+                audioStatus: 2,
+                role: SessionMemberRole.Student,
+                currentPageFirebase: 'pageB'
+            });
+
+            sut.addDelta((1 / sut.fps) * 1000); // add enough for one frame
+            await sut.render();
+
+            expect(writeElapsedFrames).to.have.been.calledOnce.calledWithExactly(1);
             expect(writeSnapshot).to.have.been.calledOnce.calledWithExactly(1);
         });
     });

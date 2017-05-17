@@ -17,8 +17,14 @@ export class BackgroundLayer extends CanvasLayer {
     static lineColor = 'rgba(0,0,0,0.3)';
     static lineWidth = 1;
 
+    constructor(width: number, height: number, type: PageType) {
+        super(width, height);
+        this.setPageType(type);
+    }
+
     setPageType(type: PageType): void {
         this.canvas.clear();
+        this._isDirty = true;
         this.canvas.setBackgroundColor('rgba(255, 255, 255, 1.0)', () => this.canvas.renderAll());
 
         switch (type) {

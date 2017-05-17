@@ -1,6 +1,3 @@
-import * as Fabric from 'fabric';
-const fabric = (Fabric as any).fabric as typeof Fabric;
-
 import { createReadStream, createWriteStream } from 'fs';
 import 'rxjs/add/operator/partition';
 import { Subscription } from 'rxjs/Subscription';
@@ -10,7 +7,8 @@ import { ApplicationError, ErrorCode } from '../application-error';
 import { TreeDataEventType } from '../blaze/tree-data-event';
 import { UrlMap } from '../util';
 import { BackgroundLayer } from './background-layer';
-import { DataRetriever, Drawable, PathDrawable, PictureDrawable, WhiteboardInfo } from './data-retriever';
+import { DataRetriever, Drawable, MemberInfo, PageInfo, PathDrawable, PictureDrawable, SessionMemberRole, WhiteboardInfo } from './data-retriever';
+import { Page } from './page';
 import { PathLayer } from './path-layer';
 import { Picture } from './picture';
 import { PictureLayer } from './picture-layer';
@@ -32,16 +30,15 @@ export class Whiteboard {
 
     private dataRetriever: DataRetriever; // generates observables for listening to blazeDb updates
     private subscription: Subscription; // a set of all active blazeDb subscriptions
-    private drawableTypeMap = new Map<string, string>(); // maps the id of drawables to their type => needed for when drawables are removed
+
+    private whiteboardInfo: WhiteboardInfo; // currently only used to obtain the intial dimensions
+    private pages = new Map<string, Page>(); // maps page keys to their respective Page objects
+    private currentPage: Page; // current page of the whiteboard, from the student's perspective
 
     private isStarted = false; // the rendering starts when the audio starts; don't modify the clock until this is true
+    private hasPageChanged = false; // has the student's active page changed => need to re-render if so
+
     private clock = 0; // the millisecond duration into the video that the whiteboard's canvas currently represents
-
-    private backgroundLayer: BackgroundLayer; // canvas for drawing the PaperType background to
-    private pictureLayer: PictureLayer; // canvas for drawing pictures to
-    private pathLayer: PathLayer; // canvas for drawing paths to; needs it's own canvas so that erasers don't erase background images
-    private snapshot: fabric.Canvas; // canvas representing the current state of the whiteboard
-
     private frameIdx = 0; // the last frame to have been written (i.e `{frameIdx}.png`)
 
     constructor(outputDir: string, pictures: UrlMap, dataRetriever: DataRetriever) {
@@ -50,11 +47,6 @@ export class Whiteboard {
 
         this.dataRetriever = dataRetriever;
         this.subscription = new Subscription();
-
-        this.backgroundLayer = new BackgroundLayer();
-        this.pictureLayer = new PictureLayer();
-        this.pathLayer = new PathLayer();
-        this.snapshot = fabric.createCanvasForNode(0, 0);
 
         // start listening for updates to the blazeDb
         this.subscribe();
@@ -78,13 +70,10 @@ export class Whiteboard {
      * a rate of this.fps
      */
     async render(): Promise<void> {
-        // only render if the whiteboard has recently been changed
-        if (!this.pictureLayer.isDirty && !this.pathLayer.isDirty) {
+        // only render if the whiteboard page has recently been modified or switched to a different page
+        if (!(this.currentPage && this.currentPage.isDirty) && !this.hasPageChanged) {
             return;
         }
-
-        // render a new frame for the recent changes (i.e. compose all layers)
-        await this.composeLayers();
 
         // check to see if these changes have occured within the same frame
         const elapsedFrames = this.getElapsedFrameCount();
@@ -106,25 +95,13 @@ export class Whiteboard {
                 throw new ApplicationError(ErrorCode.WriteFail, err);
             });
         }
+
+        this.hasPageChanged = false;
     }
 
     private getElapsedFrameCount(): number {
         const totalFrames = this.clock / ((1 / this.fps) * 1000);
         return Math.floor(totalFrames - this.frameIdx);
-    }
-
-    private async composeLayers(): Promise<void> {
-        this.snapshot.clear();
-
-        this.snapshot.add(await Whiteboard.imageFromURL(this.backgroundLayer.dataUrl));
-        this.snapshot.add(await Whiteboard.imageFromURL(this.pictureLayer.dataUrl));
-        this.snapshot.add(await Whiteboard.imageFromURL(this.pathLayer.dataUrl));
-    }
-
-    static async imageFromURL(url: string): Promise<fabric.Image> {
-        return new Promise<fabric.Image>((resolve) => {
-            fabric.Image.fromURL(url, image => resolve(image));
-        });
     }
 
     private writeSnapshot(idx: number): Promise<{}>  {
@@ -133,7 +110,7 @@ export class Whiteboard {
 
             const file = createWriteStream(`${this.outputDir}/${idx}.png`);
 
-            const stream = (this.snapshot as any).createPNGStream();
+            const stream = (await this.currentPage.getSnapshot() as any).createPNGStream();
             stream.on('data', (chunk: any) => file.write(chunk));
             stream.on('end', () => file.end());
 
@@ -173,68 +150,37 @@ export class Whiteboard {
         );
 
         this.subscription.add(
-            this.dataRetriever.listenForPages()
-                .subscribe(key => this.onNewPage(key))
+            this.dataRetriever.listenForPageUpdates()
+                .subscribe(info => this.onPageUpdate(info))
         );
 
         this.subscription.add(
             this.dataRetriever.listenForAudioStart()
                 .subscribe(() => this.onAudioStart())
         );
+
+        this.subscription.add(
+            this.dataRetriever.listenForMemberInfoUpdates()
+                .filter(info => info.role === SessionMemberRole.Student)
+                .subscribe(info => this.onStudentUpdate(info))
+        );
     }
 
     private onWhiteboardInfo(info: WhiteboardInfo): void {
-        try {
-            // set new dimensions for all layers + snapshot canvas
-            this.backgroundLayer.setDimensions(info.canvasWidth, info.canvasHeight);
-            this.pictureLayer.setDimensions(info.canvasWidth, info.canvasHeight);
-            this.pathLayer.setDimensions(info.canvasWidth, info.canvasHeight);
-            this.snapshot.setWidth(info.canvasWidth);
-            this.snapshot.setHeight(info.canvasHeight);
-
-            // draw the background for the first page
-            const key = Object.keys(info.pages)[0];
-            const pageInfo = info.pages[key];
-            this.backgroundLayer.setPageType(pageInfo.paperType);
-        } catch (err) {
-            logger.error(err);
-            throw(err);
-        }
-    }
-
-    private onNewPage(pageKey: string): void {
-        this.subscription.add(
-            this.dataRetriever.listenForAddedDrawables(pageKey)
-                .filter((d: PathDrawable & PictureDrawable) =>
-                            d.d2 !== undefined || d.d3 !== undefined || d.imageURL !== undefined)
-                .subscribe(d => this.onAddedDrawable(d))
-        );
-
-        this.subscription.add(
-            this.dataRetriever.listenForChangedDrawables(pageKey)
-                .filter((d: PathDrawable & PictureDrawable) =>
-                                d.d2 !== undefined || d.d3 !== undefined || d.imageURL !== undefined)
-                .subscribe(d => this.onChangedDrawable(d))
-        );
-
-        this.subscription.add(
-            this.dataRetriever.listenForRemovedDrawables(pageKey)
-                .subscribe(key => this.onRemovedDrawable(key))
-        );
+        this.whiteboardInfo = info;
     }
 
     private onAudioStart(): void {
         this.isStarted = true;
     }
 
-    private onAddedDrawable(d: Drawable): void {
+    private onPageUpdate(info: PageInfo) {
         try {
-            this.drawableTypeMap.set(d.key, d.type!);
-
-            if (d.type === 'path') {
-                this.pathLayer.drawPath(d as PathDrawable);
+            const page = this.pages.get(info.key);
+            if (!page) {
+                this.createNewPage(info);
             } else {
-                this.addPicture(d as PictureDrawable);
+                page.updatePageInfo(info);
             }
         } catch (err) {
             logger.error(err);
@@ -242,44 +188,52 @@ export class Whiteboard {
         }
     }
 
-    private onChangedDrawable(d: Drawable): void {
-        try {
-            this.drawableTypeMap.set(d.key, d.type!);
+    private onStudentUpdate(info: MemberInfo): void {
+        if (!info.currentPageFirebase) {
+            return;
+        }
 
-            if (d.type === 'path') {
-                this.pathLayer.drawPath(d as PathDrawable);
-            } else {
-                const drawable = d as PictureDrawable;
-
-                if (!this.pictureLayer.hasPicture(drawable.imageURL!)) {
-                    this.addPicture(drawable);
-                } else {
-                    this.pictureLayer.transformPicture(drawable);
-                }
-            }
-        } catch (err) {
-            logger.error(err);
-            throw(err);
+        const newPage = this.pages.get(info.currentPageFirebase);
+        if (newPage) {
+            this.setCurrentPage(newPage);
         }
     }
 
-    private onRemovedDrawable(key: string): void {
-        try {
-            const type = this.drawableTypeMap.get(key);
-            if (type === 'path') {
-                this.pathLayer.removePath(key);
-            } else {
-                this.pictureLayer.removePicture(key);
-            }
-        } catch (err) {
-            logger.error(err);
-            throw(err);
+    private createNewPage(info: PageInfo): void {
+        const page = new Page(info, this.whiteboardInfo.canvasWidth, this.whiteboardInfo.canvasHeight, this.pictures);
+        this.pages.set(info.key, page);
+        this.subscribeToPage(page);
+
+        // this assignment is needed because the pages are initialized before the student connects,
+        // and the video starts rendering as soon as the tutor's audio starts
+        if (this.frameIdx === 0) {
+            this.setCurrentPage(page);
         }
     }
 
-    private addPicture(d: PictureDrawable): void {
-        const picture = this.pictures.get(d.imageURL!)!;
-        picture.setDrawable(d);
-        this.pictureLayer.addPicture(picture);
+    private setCurrentPage(page: Page) {
+        this.currentPage = page;
+        this.hasPageChanged = true;
+    }
+
+    private subscribeToPage(page: Page): void {
+        this.subscription.add(
+            this.dataRetriever.listenForAddedDrawables(page.key)
+                .filter((d: PathDrawable & PictureDrawable) =>
+                            d.d2 !== undefined || d.d3 !== undefined || d.imageURL !== undefined)
+                .subscribe(d => page.onAddedDrawable(d))
+        );
+
+        this.subscription.add(
+            this.dataRetriever.listenForChangedDrawables(page.key)
+                .filter((d: PathDrawable & PictureDrawable) =>
+                                d.d2 !== undefined || d.d3 !== undefined || d.imageURL !== undefined)
+                .subscribe(d => page.onChangedDrawable(d))
+        );
+
+        this.subscription.add(
+            this.dataRetriever.listenForRemovedDrawables(page.key)
+                .subscribe(k => page.onRemovedDrawable(k))
+        );
     }
 }

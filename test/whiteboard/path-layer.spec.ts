@@ -19,7 +19,7 @@ describe('PathLayer', () => {
             d2: { 1: '|M42.000,42.000|' }
         };
 
-        sut = new PathLayer();
+        sut = new PathLayer(100, 100);
     });
 
     describe('drawPath()', () => {

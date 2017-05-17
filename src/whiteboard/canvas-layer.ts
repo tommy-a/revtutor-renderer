@@ -30,8 +30,8 @@ export class CanvasLayer {
     get isDirty() { return this._isDirty; }
     protected _isDirty = false; // has the canvas been modified
 
-    constructor() {
-        this._canvas = createCanvasForNode(0, 0);
+    constructor(width: number, height: number) {
+        this._canvas = createCanvasForNode(width, height);
     }
 
     /**
@@ -41,16 +41,5 @@ export class CanvasLayer {
     get dataUrl(): string {
         this._isDirty = false;
         return this.canvas.toDataURL();
-    }
-
-    /**
-     * Sets the dimensions of the underlying canvas, as well as marks _isDirty to true
-     * @param width - number of pixels
-     * @param height - number of pixels
-     */
-    setDimensions(width: number, height: number): void {
-        this.canvas.setWidth(width);
-        this.canvas.setHeight(height);
-        this._isDirty = true;
     }
 }

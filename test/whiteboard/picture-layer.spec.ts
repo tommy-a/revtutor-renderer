@@ -13,7 +13,7 @@ describe('PictureLayer', () => {
     let sut: PictureLayer;
 
     beforeEach(() => {
-        sut = new PictureLayer();
+        sut = new PictureLayer(100, 100);
     });
 
     describe('addPicture()', () => {

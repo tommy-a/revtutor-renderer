@@ -6,7 +6,7 @@ describe('CanvasLayer', () => {
     let sut: CanvasLayer;
 
     beforeEach(() => {
-        sut = new CanvasLayer();
+        sut = new CanvasLayer(100, 100);
     });
 
     it('should set _isDirty to false', () => {
@@ -21,16 +21,6 @@ describe('CanvasLayer', () => {
 
             expect(sut.isDirty).to.be.false;
             expect(url.indexOf('data:image/png;base64')).to.equal(0);
-        });
-    });
-
-    describe('setDimensions()', () => {
-        it('should transform the canvas\' dimensions, and set _isDirty to true', () => {
-            sut.setDimensions(100, 100);
-
-            expect(sut.isDirty).to.be.true;
-            expect(sut.width).to.equal(100);
-            expect(sut.height).to.equal(100);
         });
     });
 });
